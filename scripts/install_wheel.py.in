@@ -20,6 +20,7 @@ if "@CMAKE_INSTALL_PREFIX@" not in site.PREFIXES:
 
 wheel_file = str(wheels[-1])
 print(f"[INFO] Installing wheel {wheel_file}")
+
 cmd = [
     sys.executable,
     "-m",
@@ -27,7 +28,10 @@ cmd = [
     "install",
     "--verbose",
     wheel_file,
-    "--no-deps" ]
+    "--no-deps",
+    "--prefix",
+    "@CMAKE_INSTALL_PREFIX@",
+    ]
 
 print(f"-- Executing {' '.join(cmd)}")
 print(f"-- If this is not what you want, please install the {wheel_file} yourself.")

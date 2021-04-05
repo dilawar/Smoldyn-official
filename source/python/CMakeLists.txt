@@ -19,7 +19,10 @@ set_target_properties(_pysmoldyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(_pysmoldyn PRIVATE ${DEP_LIBS})
 target_link_libraries(_pysmoldyn PUBLIC ${PYTHON_LIBRARIES})
 
-# A custom target to install dependencies. Useful on various CI
+#
+# A custom target to install dependencies. Useful on various CI, do not run it
+# when building packages on OBS.
+#
 add_custom_target(install_deps 
     COMMAND ${Python3_EXECUTABLE} -m pip install wheel numpy setuptools --user
     COMMENT "Installing Python modules for testing"
@@ -78,7 +81,9 @@ add_custom_target(wheel ALL
     COMMENT "Generating wheel in ${CMAKE_BINARY_DIR}"
     VERBATIM)
 
+#
 # This target is used by install script (useful in packaging).
+#
 add_custom_target(pyinstall
     COMMAND ${Python3_EXECUTABLE} setup.py install 
       --prefix ${CMAKE_INSTALL_PREFIX}
@@ -118,12 +123,13 @@ add_custom_target(lint_strict
 #
 # Install target 
 #
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/install_wheel.py.in
-    ${CMAKE_BINARY_DIR}/install_wheel.py)
 
-install(CODE "execute_process(
-    COMMAND ${Python3_EXECUTABLE} install_wheel.py
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+#configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/install_wheel.py.in
+#    ${CMAKE_BINARY_DIR}/install_wheel.py)
+
+install(CODE "message(STATUS 
+    \"[NOTE] Please install the python wheel manually using pip.\n\"
+    \"[NOTE]  e.g., python3 -m pip install smoldyn-2.64.4-cp37-cp37m-linux_x86_64.whl.\n\"
     )")
 
 ###  python tests ###
