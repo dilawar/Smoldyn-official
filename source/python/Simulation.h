@@ -28,11 +28,7 @@ using namespace std;
 class Simulation {
 public:
     Simulation(vector<double>& low, vector<double>& high, vector<string>& boundary_type)
-        : low_(low),
-          high_(high),
-          curtime_(0.0),
-          initDisplay_(false),
-          debug_(false)
+        : low_(low), high_(high), curtime_(0.0), initDisplay_(false), debug_(false)
     {
         assert(low.size() == high.size());
 
@@ -51,8 +47,7 @@ public:
         }
     }
 
-    Simulation(simptr sim)
-        : sim_(sim), initDisplay_(false), debug_(false), curtime_(0.0)
+    Simulation(simptr sim) : sim_(sim), initDisplay_(false), debug_(false), curtime_(0.0)
     {
         // Just copy the simptr.
         // FIXME: I am forgetting anything here.
@@ -196,7 +191,7 @@ public:
         return smolRunSimUntil(sim_, breaktime);
     }
 
-    inline bool connect(const py::function& func, const py::object& target,
+    inline bool connect(const py::function func, const py::handle& target,
         const size_t step, const py::list& args)
     {
         assert(sim_->ncallbacks < MAX_PY_CALLBACK);
