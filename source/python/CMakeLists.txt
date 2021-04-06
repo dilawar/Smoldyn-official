@@ -127,9 +127,11 @@ add_custom_target(lint_strict
 #configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/install_wheel.py.in
 #    ${CMAKE_BINARY_DIR}/install_wheel.py)
 
-install(CODE "message(STATUS 
+install(CODE "message( 
+    \"===============================================================\n\"
     \"[NOTE] Please install the python wheel manually using pip.\n\"
     \"[NOTE]  e.g., python3 -m pip install smoldyn-2.64.4-cp37-cp37m-linux_x86_64.whl.\n\"
+    \"===============================================================\"
     )")
 
 ###  python tests ###
