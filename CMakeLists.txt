@@ -9,10 +9,6 @@ cmake_minimum_required(VERSION 3.12)   # due to better Python support
 
 project(smoldyn LANGUAGES CXX C)
 
-if(POLICY CMP0042)
-    cmake_policy(SET CMP0042 NEW)
-endif()
-
 # CI/CD can also set this variable. If not, use the default one.
 if(NOT SMOLDYN_VERSION)
     find_package(Git QUIET)
@@ -109,26 +105,25 @@ if(CONAN-NOTFOUND)
     execute_process(COMMAND ${Python3_EXECUTABLE} -m pip install cmake)
 endif()
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_BINARY_DIR})
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR})
-
 include(${CMAKE_SOURCE_DIR}/cmake/conan.cmake)
 
-if(OPTION_NSV)
-    conan_cmake_run(REQUIRES 
-        eigen/3.3.9 
-        boost/1.75.0
-        BASIC_SETUP CMAKE_TARGETS
-        OPTIONS boost:header_only=True
-        BUILD missing)
-endif()
+# find required packages 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
 
-if(OPTION_PYTHON)
-    conan_cmake_run(REQUIRES 
-        pybind11/2.6.2
-        BASIC_SETUP CMAKE_TARGETS
-        BUILD missing)
-endif()
+conan_cmake_configure(REQUIRES
+        eigen/3.3.9
+        boost/1.75.0 
+        pybind11/2.6.1 
+    GENERATORS cmake_find_package
+    OPTIONS boost:header_only=True)
+
+
+conan_cmake_autodetect(settings)
+conan_cmake_install(PATH_OR_REFERENCE .
+    BUILD missing
+    REMOTE conan-center
+    SETTINGS ${settings})
 
 ######### Core code information ###########
 

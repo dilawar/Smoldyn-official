@@ -1,3 +1,6 @@
+find_package(Eigen3 REQUIRED)
+find_package(Boost REQUIRED)
+
 if (OPTION_MINGW)
     find_path(SIGNAL_H_DIR signal.h PATHS ${MINGWDIR}/include NO_DEFAULT_PATH)
     if (SIGNAL_H_DIR)
@@ -19,6 +22,6 @@ set(SRC_FILES
     nsvc.cpp)
 
 add_library(nsv STATIC ${SRC_FILES})
-target_link_libraries(nsv PRIVATE CONAN_PKG::eigen CONAN_PKG::boost)
+target_link_libraries(nsv PRIVATE Eigen3::Eigen Boost::boost)
 
 set_property(TARGET nsv PROPERTY POSITION_INDEPENDENT_CODE ON)
