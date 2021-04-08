@@ -1,23 +1,3 @@
-
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_BINARY_DIR})
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR})
-
-conan_cmake_configure(REQUIRES 
-        eigen/3.3.9
-        boost/1.75.0
-    GENERATORS cmake_find_package
-    OPTIONS boost:header_only=True)
-
-conan_cmake_autodetect(settings)
-
-conan_cmake_install(PATH_OR_REFERENCE .
-    BUILD missing
-    REMOTE conan-center
-    SETTINGS ${settings})
-
-find_package(Eigen3 REQUIRED)
-find_package(Boost REQUIRED)
-
 if (OPTION_MINGW)
     find_path(SIGNAL_H_DIR signal.h PATHS ${MINGWDIR}/include NO_DEFAULT_PATH)
     if (SIGNAL_H_DIR)
@@ -39,6 +19,6 @@ set(SRC_FILES
     nsvc.cpp)
 
 add_library(nsv STATIC ${SRC_FILES})
-target_link_libraries(nsv PRIVATE Eigen3::Eigen Boost::boost)
+target_link_libraries(nsv PRIVATE CONAN_PKG::eigen CONAN_PKG::boost)
 
 set_property(TARGET nsv PROPERTY POSITION_INDEPENDENT_CODE ON)

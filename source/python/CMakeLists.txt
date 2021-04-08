@@ -1,7 +1,7 @@
 # python binding.
 
 # recompile libsmoldyn for PYTHON.
-set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX )
+set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX)
 add_library(_pysmoldyn STATIC ${SRC_FILES})
 target_include_directories(_pysmoldyn PRIVATE ${Python3_INCLUDE_DIRS} ${PYBIND11_SOURCE_DIR}/include)
 
@@ -17,7 +17,7 @@ target_compile_options(_pysmoldyn PRIVATE -fvisibility=hidden)
 
 set_target_properties(_pysmoldyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(_pysmoldyn PRIVATE ${DEP_LIBS})
-target_link_libraries(_pysmoldyn PUBLIC ${PYTHON_LIBRARIES})
+target_link_libraries(_pysmoldyn PRIVATE CONAN_PKG::pybind11)
 
 # A custom target to install dependencies. Useful on various CI
 add_custom_target(install_deps 
@@ -26,7 +26,6 @@ add_custom_target(install_deps
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     VERBATIM)
 
-# FIXME: If it comes in your way, comment it out.
 # FIXME: FOllowing runs on github actions and other CI (for Windows only).
 # Its very hard to locate correct version of Python on every cloud based CI. 
 # So I let cmake install the dependencies at build time.
@@ -49,9 +48,8 @@ target_compile_options(_smoldyn PRIVATE
     -DENABLE_PYTHON_CALLBACK 
     # https://pybind11.readthedocs.io/en/stable/faq.html#someclass-declared-with-greater-visibility-than-the-type-of-its-field-someclass-member-wattributes
     -fvisibility=hidden)
-target_include_directories(_smoldyn PRIVATE 
-    ${PYTHON_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/source/external/pybind11/include)
+
+target_include_directories(_smoldyn PRIVATE ${Python3_INCLUDE_DIRS})
 
 # If generator pattern is not used here, cmake produces module in Release/Debug folders
 # which will break the wheels.

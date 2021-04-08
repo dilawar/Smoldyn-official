@@ -40,13 +40,6 @@ endif()
 message(STATUS "Smoldyn version set to: '${SMOLDYN_VERSION}'")
 
 set(CMAKE_CXX_STANDARD 14)
-
-#
-# conan package manager. 
-#
-include(${CMAKE_SOURCE_DIR}/cmake/conan.cmake)
-
-
 ######### Targets to build ###########
 
 option(OPTION_TARGET_SMOLDYN "Create stand-alone Smoldyn program" ON)
@@ -107,6 +100,35 @@ message(STATUS "Option to incude Python module: ${OPTION_PYTHON}")
 message(STATUS "Option to run Libsmoldyn examples: ${OPTION_EXAMPLES}")
 message(STATUS "Option to build documentation: ${OPTION_DOCS}")
 
+
+#
+# conan package manager. 
+#
+find_program(CONAN conan HINTS $ENV{HOME}/.local/bin)
+if(CONAN-NOTFOUND)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -m pip install cmake)
+endif()
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_BINARY_DIR})
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR})
+
+include(${CMAKE_SOURCE_DIR}/cmake/conan.cmake)
+
+if(OPTION_NSV)
+    conan_cmake_run(REQUIRES 
+        eigen/3.3.9 
+        boost/1.75.0
+        BASIC_SETUP CMAKE_TARGETS
+        OPTIONS boost:header_only=True
+        BUILD missing)
+endif()
+
+if(OPTION_PYTHON)
+    conan_cmake_run(REQUIRES 
+        pybind11/2.6.2
+        BASIC_SETUP CMAKE_TARGETS
+        BUILD missing)
+endif()
 
 ######### Core code information ###########
 
@@ -522,8 +544,6 @@ endif ()
 if (OPTION_PYTHON)
     # Find python before using pybind11. There is a possibility of version mismatch later.
     find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-    set(PYBIND11_SOURCE_DIR ${CMAKE_SOURCE_DIR}/source/pybind11)
-    add_subdirectory(${PYBIND11_SOURCE_DIR})
     add_subdirectory(${CMAKE_SOURCE_DIR}/source/python)
 endif ()
 
