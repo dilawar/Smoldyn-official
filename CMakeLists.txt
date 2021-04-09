@@ -130,6 +130,7 @@ if(OPTION_USE_LIBTIFF)
     list(APPEND CONAN_OPTIONS libtiff:zstd=False 
         libtiff:jbig=False 
         libtiff:webp=False
+        libtiff:jpeg=False
         libtiff:libdeflate=False)
 endif()
 
