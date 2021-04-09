@@ -118,11 +118,23 @@ include(${CMAKE_SOURCE_DIR}/cmake/conan.cmake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
 
-conan_cmake_configure(REQUIRES
+if(OPTION_NSV)
+    conan_cmake_configure(REQUIRES
         eigen/3.3.9
         boost/1.75.0 
-    GENERATORS cmake_find_package
-    OPTIONS boost:header_only=True)
+        GENERATORS cmake_find_package
+        OPTIONS boost:header_only=True)
+endif()
+
+if(OPTION_USE_LIBTIFF)
+    conan_cmake_configure(REQUIRES
+        libtiff/4.2.0
+        GENERATORS cmake_find_package
+        OPTIONS libtiff:zstd=False 
+        libtiff:jbig=False 
+        libtiff:webp=False
+        libtiff:libdeflate=False)
+endif()
 
 conan_cmake_autodetect(settings)
 conan_cmake_install(PATH_OR_REFERENCE .
@@ -406,56 +418,18 @@ endif()
 ####### Option: Build with LibTiff ##########
 
 if (OPTION_USE_LIBTIFF)
-    if (MINGW_BUILD)
-        find_path(TIFF_INCLUDE_DIR tiff.h PATHS ${MINGWDIR}/include NO_DEFAULT_PATH)
-        find_library(TIFF_LIBRARY libtiff.a PATHS ${MINGWDIR}/lib NO_DEFAULT_PATH)
-    elseif (WINDOWS_BUILD)
-        find_path(TIFF_INCLUDE_DIR tiff.h source/MSVClibs NO_DEFAULT_PATH)
-        set(HAVE_TIFF_H TRUE)
-        find_file(TIFF_LIBRARY NAMES tiff.lib PATHS source/MSVClibs NO_DEFAULT_PATH)
-        set(TIFF_FOUND TRUE)
-    elseif (OPTION_STATIC)
-        find_path(TIFF_INCLUDE_DIR tiff.h PATHS ${CMAKE_SOURCE_DIR}/Mac/libtiff/include NO_DEFAULT_PATH)
-        find_library(TIFF_LIBRARY libtiff.a ${CMAKE_SOURCE_DIR}/Mac/libtiff/lib NO_DEFAULT_PATH)
-    else ()
-        find_package(TIFF)
-    endif()
-
-    if(TIFF_INCLUDE_DIR AND TIFF_LIBRARY)
-        set(HAVE_LIBTIFF TRUE)
-        message(STATUS "Found Libtiff: '${TIFF_INCLUDE_DIR}', '${TIFF_LIBRARY}'")
-    else()
-        set(HAVE_LIBTIFF FALSE)
-        message(STATUS "Libtiff include and library variables: '${TIFF_INCLUDE_DIR}', '${TIFF_LIBRARY}'")
-        message(FATAL_ERROR "Libtiff not found")
-    endif ()
-
-    include_directories(${TIFF_INCLUDE_DIR})
-    list(APPEND DEP_LIBS ${TIFF_LIBRARY})
+    find_package(TIFF REQUIRED)
+    list(APPEND DEP_LIBS TIFF::TIFF)
 endif ()
 
 
 ####### Option: Build with Zlib ##########
 
 if(OPTION_USE_ZLIB)
-    if(OPTION_MINGW)
-        find_path(ZLIB_INCLUDE_DIRS zlib.h PATHS ${MINGWDIR}/include NO_DEFAULT_PATH)
-        find_library(ZLIB_LIBRARIES libz.a PATHS ${MINGWDIR}/lib NO_DEFAULT_PATH)
-    elseif(OPTION_STATIC)
-        find_path(ZLIB_INCLUDE_DIRS zlib.h)
-        find_library(ZLIB_LIBRARIES libz.a)
-    else()
-        include(FindZlib)
-    endif()
-
-    if(ZLIB_INCLUDE_DIRS AND ZLIB_LIBRARIES)
-        set(HAVE_ZLIB TRUE)
-        message(STATUS "Found Zlib: '${ZLIB_INCLUDE_DIRS}', '${ZLIB_LIBRARIES}'")
-    else()
-        set(HAVE_ZLIB FALSE)
-        message(FATAL_ERROR "Zlib not found")
-    endif()
-
+    conan_cmake_configure(REQUIRES
+        zlib/1.2.11
+        GENERATORS cmake_find_package)
+    find_path(ZLIB REQUIRED)
     include_directories(${ZLIB_INCLUDE_DIRS})
     list(APPEND DEP_LIBS ${ZLIB_LIBRARIES})
 endif(OPTION_USE_ZLIB)
@@ -464,27 +438,10 @@ endif(OPTION_USE_ZLIB)
 ####### Option: Build with iconv ##########
 
 if(OPTION_USE_ICONV)
-    if(OPTION_MINGW)
-        find_path(ICONV_INCLUDE_DIRS iconv.h PATHS ${MINGWDIR}/include NO_DEFAULT_PATH)
-        find_library(ICONV_LIBRARIES libiconv.a PATHS ${MINGWDIR}/lib NO_DEFAULT_PATH)
-    elseif(OPTION_STATIC)
-        find_path(ICONV_INCLUDE_DIRS iconv.h)
-        find_library(ICONV_LIBRARIES libiconv.a)
-    else()
-        find_path(ICONV_INCLUDE_DIRS iconv.h)
-        find_library(ICONV_LIBRARIES NAMES iconv)
-    endif()
-
-    if(ICONV_INCLUDE_DIRS AND ICONV_LIBRARIES)
-        set(HAVE_ICONV TRUE)
-        message(STATUS "Found Libiconv: '${ICONV_INCLUDE_DIRS}', '${ICONV_LIBRARIES}'")
-    else()
-        set(HAVE_ICONV FALSE)
-        message(FATAL_ERROR "Libiconv not found")
-    endif()
-
-    include_directories(${ICONV_INCLUDE_DIRS})
-    list(APPEND DEP_LIBS ${ICONV_LIBRARIES})
+    conan_cmake_configure(REQUIRES libiconv/1.16 GENERATORS cmake_find_package)
+    find_pacakge(Iconv REQUIRED)
+    include_directories(${Iconv_INCLUDE_DIRS})
+    list(APPEND DEP_LIBS Iconv::Iconv)
 endif(OPTION_USE_ICONV)
 
 
@@ -493,18 +450,10 @@ endif(OPTION_USE_ICONV)
 if(OPTION_VTK)
     add_definitions(-DHAVE_VTK)
     find_package(VTK REQUIRED)
-    if(VTK_FOUND)
-        message(STATUS "Found VTK: '${VTK_INCLUDE_DIRS}'")
-    else()
-        message(FATAL_ERROR "VTK not found")
-    endif()
-
     include_directories(source/vtk ${VTK_INCLUDE_DIRS})
-
     list(APPEND SRC_FILES source/vtk/vtkwrapper.cpp)
     list(APPEND HEADER_FILES source/vtk/vtkwrapper.h)
     list(APPEND DEP_LIBS ${VTK_LIBRARIES})
-
 endif(OPTION_VTK)
 
 
