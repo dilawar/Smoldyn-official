@@ -113,28 +113,39 @@ if(CONAN-NOTFOUND)
 endif()
 include(${CMAKE_SOURCE_DIR}/cmake/conan.cmake)
 
-
-# find required packages 
+# location of generated cmake modules
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
 
+set(CONAN_LIBS "")
+set(CONAN_OPTIONS "")
 if(OPTION_NSV)
-    conan_cmake_configure(REQUIRES
-        eigen/3.3.9
-        boost/1.75.0 
-        GENERATORS cmake_find_package
-        OPTIONS boost:header_only=True)
-endif()
+    list(APPEND CONAN_LIBS boost/1.75.0 eigen/3.3.9)
+    list(APPEND CONAN_OPTIONS boost:header_only=True)
+endif(OPTION_NSV)
 
 if(OPTION_USE_LIBTIFF)
-    conan_cmake_configure(REQUIRES
-        libtiff/4.2.0
-        GENERATORS cmake_find_package
-        OPTIONS libtiff:zstd=False 
+    list(APPEND CONAN_LIBS libtiff/4.2.0)
+    list(APPEND CONAN_OPTIONS libtiff:zstd=False 
         libtiff:jbig=False 
         libtiff:webp=False
         libtiff:libdeflate=False)
 endif()
+
+if(OPTION_USE_ZLIB)
+    list(APPEND CONAN_LIBS zlib/1.2.11)
+endif(OPTION_USE_ZLIB)
+
+if(OPTION_USE_ICONV)
+    list(APPEND CONAN_LIBS libiconv/1.16)
+endif(OPTION_USE_ICONV)
+
+#
+# Install using conan
+#
+conan_cmake_configure(REQUIRES ${CONAN_LIBS} 
+    GENERATORS cmake_find_package
+    OPTIONS ${CONAN_OPTIONS})
 
 conan_cmake_autodetect(settings)
 conan_cmake_install(PATH_OR_REFERENCE .
@@ -426,9 +437,6 @@ endif ()
 ####### Option: Build with Zlib ##########
 
 if(OPTION_USE_ZLIB)
-    conan_cmake_configure(REQUIRES
-        zlib/1.2.11
-        GENERATORS cmake_find_package)
     find_path(ZLIB REQUIRED)
     include_directories(${ZLIB_INCLUDE_DIRS})
     list(APPEND DEP_LIBS ${ZLIB_LIBRARIES})
@@ -438,7 +446,6 @@ endif(OPTION_USE_ZLIB)
 ####### Option: Build with iconv ##########
 
 if(OPTION_USE_ICONV)
-    conan_cmake_configure(REQUIRES libiconv/1.16 GENERATORS cmake_find_package)
     find_pacakge(Iconv REQUIRED)
     include_directories(${Iconv_INCLUDE_DIRS})
     list(APPEND DEP_LIBS Iconv::Iconv)
