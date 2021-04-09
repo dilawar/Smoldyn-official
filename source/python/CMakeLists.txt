@@ -44,13 +44,13 @@ pybind11_add_module(_smoldyn MODULE
     Simulation.cpp 
     module.cpp)
 
+target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
+
 # If generator pattern is not used here, cmake produces module in Release/Debug folders
 # which will break the wheels.
 # https://cmake.org/cmake/help/latest/prop_tgt/LIBRARY_OUTPUT_DIRECTORY.html#prop_tgt:LIBRARY_OUTPUT_DIRECTORY
 set_target_properties(_smoldyn PROPERTIES 
     LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>)
-
-target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
 
 target_compile_options(_smoldyn PRIVATE 
     -DSMOLDYN_VERSION=${SMOLDYN_VERSION} 
@@ -65,7 +65,9 @@ add_custom_command(TARGET _smoldyn POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_smoldyn>
     ${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/)
 
-# ../examples/CMakeLists.txt file.
+#
+# Copy python source tree to a temp directory.
+#
 set(PY_SMOLDYN_OUTDIR ${CMAKE_BINARY_DIR}/py)
 file(MAKE_DIRECTORY ${PY_SMOLDYN_OUTDIR})
 
@@ -73,7 +75,7 @@ add_custom_target(copy_python_tree ALL
     DEPENDS _smoldyn
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/source/python/smoldyn ${PY_SMOLDYN_OUTDIR}/smoldyn
-    COMMENT "Copying python source tree to binary directory"
+    COMMENT "Copying python source tree to current directory"
     VERBATIM)
 
 
