@@ -1,11 +1,17 @@
 # python binding.
 
-find_package(pybind11 REQUIRED)
+# Use the conan_cmake_run till this PR is merged:
+# https://github.com/conan-io/conan-center-index/pull/4445
+# find_package(pybind11 CONFIG REQUIRED)
+
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+conan_cmake_run(REQUIRES pybind11/2.6.1 BASIC_SETUP CMAKE_TARGETS)
 
 # recompile libsmoldyn for PYTHON module.
 set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX)
 add_library(_pysmoldyn STATIC ${SRC_FILES})
-target_include_directories(_pysmoldyn PRIVATE ${Python3_INCLUDE_DIRS} ${PYBIND11_SOURCE_DIR}/include)
+
+target_include_directories(_pysmoldyn PRIVATE ${Python3_INCLUDE_DIRS})
 
 # COMPILE_AS_PY_MODULE changes the behaviour of libSteve at a few places
 # especially where scanf is used for user input.
@@ -20,13 +26,6 @@ target_compile_options(_pysmoldyn PRIVATE -fvisibility=hidden)
 set_target_properties(_pysmoldyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(_pysmoldyn PRIVATE ${DEP_LIBS})
 target_link_libraries(_pysmoldyn PRIVATE CONAN_PKG::pybind11)
-
-# A custom target to install dependencies. Useful on various CI
-add_custom_target(install_deps 
-    COMMAND ${Python3_EXECUTABLE} -m pip install wheel numpy setuptools --user
-    COMMENT "Installing Python modules for testing"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    VERBATIM)
 
 # FIXME: FOllowing runs on github actions and other CI (for Windows only).
 # Its very hard to locate correct version of Python on every cloud based CI. 
@@ -45,6 +44,14 @@ pybind11_add_module(_smoldyn MODULE
     Simulation.cpp 
     module.cpp)
 
+# If generator pattern is not used here, cmake produces module in Release/Debug folders
+# which will break the wheels.
+# https://cmake.org/cmake/help/latest/prop_tgt/LIBRARY_OUTPUT_DIRECTORY.html#prop_tgt:LIBRARY_OUTPUT_DIRECTORY
+set_target_properties(_smoldyn PROPERTIES 
+    LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>)
+
+target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
+
 target_compile_options(_smoldyn PRIVATE 
     -DSMOLDYN_VERSION=${SMOLDYN_VERSION} 
     -DENABLE_PYTHON_CALLBACK 
@@ -53,10 +60,10 @@ target_compile_options(_smoldyn PRIVATE
 
 target_include_directories(_smoldyn PRIVATE ${Python3_INCLUDE_DIRS})
 
-# If generator pattern is not used here, cmake produces module in Release/Debug folders
-# which will break the wheels.
-set_target_properties(_smoldyn PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>)
+# Move the _smoldyn target to source tree.
+add_custom_command(TARGET _smoldyn POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:_smoldyn>
+    ${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/)
 
 # ../examples/CMakeLists.txt file.
 set(PY_SMOLDYN_OUTDIR ${CMAKE_BINARY_DIR}/py)
@@ -69,7 +76,6 @@ add_custom_target(copy_python_tree ALL
     COMMENT "Copying python source tree to binary directory"
     VERBATIM)
 
-target_link_libraries(_smoldyn PRIVATE _pysmoldyn)
 
 # copy setup.py.in to setup.py
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/setup.py.in
