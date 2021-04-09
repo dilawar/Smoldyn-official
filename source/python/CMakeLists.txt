@@ -50,6 +50,7 @@ target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
 # which will break the wheels.
 # https://cmake.org/cmake/help/latest/prop_tgt/LIBRARY_OUTPUT_DIRECTORY.html#prop_tgt:LIBRARY_OUTPUT_DIRECTORY
 set_target_properties(_smoldyn PROPERTIES 
+    ARCHIVE_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>
     LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>)
 
 target_compile_options(_smoldyn PRIVATE 
