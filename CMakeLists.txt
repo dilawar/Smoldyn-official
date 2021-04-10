@@ -142,6 +142,10 @@ if(OPTION_USE_ICONV)
     list(APPEND CONAN_LIBS libiconv/1.16)
 endif(OPTION_USE_ICONV)
 
+if(OPTION_USE_OPENGL)
+    list(APPEND CONAN_LIBS glfw/3.3.3)
+endif()
+
 #
 # Install using conan
 #
@@ -310,107 +314,11 @@ message(STATUS "BioNetGen path: '${BNG2_PATH}' ")
 
 
 ####### Option: Build with OpenGL (gl and glu only, not glut) ##########
-
 if (OPTION_USE_OPENGL)
     # see cmake --help-policy CMP0072"
-    set(OpenGL_GL_PREFERENCE LEGACY)
-
-    if (VCELL_BUILD)
-        set(HAVE_OPENGL TRUE)
-        set(HAVE_GL_GL_H TRUE)
-        set(HAVE_GL_GLU_H TRUE)
-    elseif (MINGW_BUILD)
-        list(APPEND DEP_LIBS opengl32 glu32 freeglut_static gdi32 winmm)
-        find_file(HAVE_GL_GL_H GL/gl.h PATHS ${MINGWDIR}/include)
-        find_file(HAVE_OPENGL_GL_H OpenGL/gl.h PATHS ${MINGWDIR}/include)
-        find_file(HAVE_GL_GLU_H GL/glu.h PATHS ${MINGWDIR}/include)
-        find_file(HAVE_OPENGL_GLU_H OpenGL/glu.h PATHS ${MINGWDIR}/include)
-
-        find_path(OPENGL_INCLUDE_DIR gl.h PATHS ${MINGWDIR}/include/GL)
-        get_filename_component(OPENGL_INCLUDE_DIR "${HAVE_GL_GL_H}" PATH)
-        find_library(OPENGL_LIBRARIES libopengl32.a PATHS ${MINGWDIR}/lib)
-        find_library(GLU32_LIBRARIES libglu32.a PATHS ${MINGWDIR}/lib)
-        if(GLU32_LIBRARIES)
-            message(STATUS "Glu32 found: '${GLU32_LIBRARIES}'")
-        else()
-            message(FATAL_ERROR "Glu32 not found.  Building without OpenGL is possible.")
-        endif()
-    elseif (WINDOWS_BUILD)
-        find_file(HAVE_GL_GL_H GL/gl.h PATHS source/MSVClibs NO_DEFAULT_PATH)
-        find_file(HAVE_GL_GLU_H GL/glu.h PATHS source/MSVClibs NO_DEFAULT_PATH)
-        include(FindOpenGL)
-        find_path(OPENGL_INCLUDE_DIR GL/gl.h source/MSVClibs NO_DEFAULT_PATH)
-    else()
-        find_file(HAVE_GL_GL_H GL/gl.h)
-        find_file(HAVE_OPENGL_GL_H OpenGL/gl.h)
-        find_file(HAVE_GL_GLU_H GL/glu.h)
-        find_file(HAVE_OPENGL_GLU_H OpenGL/glu.h)
-        include(FindOpenGL)
-    endif()
-
-    if(OPENGL_INCLUDE_DIR AND OPENGL_LIBRARIES)
-        set(OPENGL_FOUND TRUE)
-    endif()
-
-    if(OPENGL_FOUND)
-        message(STATUS "OpenGL found: '${OPENGL_INCLUDE_DIR}', '${OPENGL_LIBRARIES}'")
-    else()
-        message(STATUS "OpenGL include and library variables: '${OPENGL_INCLUDE_DIR}', '${OPENGL_LIBRARIES}'")
-        message(FATAL_ERROR "OpenGL not found.  Building without OpenGL is possible.")
-    endif()
-
     set(HAVE_OPENGL TRUE)
-    include_directories(${OPENGL_INCLUDE_DIR})
-    list(APPEND DEP_LIBS ${OPENGL_LIBRARIES} ${GLU32_LIBRARIES})
-endif()
-
-
-####### Option: Build with OpenGL (glut only) ##########
-
-if (OPTION_USE_OPENGL)
-    if (VCELL_BUILD)
-        set(HAVE_GL_GLUT_H TRUE)
-        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/windows/glut-3.7.6)
-        link_directories(${CMAKE_CURRENT_SOURCE_DIR}/windows/glut-3.7.6)
-        if (ARCH_64bit)
-            list(APPEND DEP_LIBS glut64)
-        else()
-            list(APPEND DEP_LIBS glut32 zlib)
-        endif()
-    elseif (MINGW_BUILD)
-        add_compile_definitions(FREEGLUT_STATIC)
-        find_file(HAVE_GL_GLUT_H GL/glut.h PATHS ${MINGWDIR}/include)
-        find_path(GLUT_INCLUDE_DIR glut.h PATHS ${MINGWDIR}/include/GL)
-        find_library(GLUT_LIBRARIES libfreeglut_static.a PATHS ${MINGWDIR}/lib)
-#   elseif(OPTION_STATIC)
-#       find_file(HAVE_GL_FREEGLUT_H GL/freeglut.h)
-#       find_path(GLUT_INCLUDE_DIR GL/freeglut.h)
-#       find_library(GLUT_LIBRARIES libglut.a)
-    elseif (WINDOWS_BUILD)
-        add_compile_definitions(FREEGLUT_STATIC)
-        find_path(GLUT_INCLUDE_DIR GL/glut.h source/MSVClibs NO_DEFAULT_PATH)
-        set(HAVE_GL_GLUT_H TRUE)
-        find_file(GLUT_LIBRARIES NAMES freeglut_static.lib PATHS source/MSVClibs NO_DEFAULT_PATH)
-        set(GLUT_FOUND TRUE)
-    else ()
-        find_file(HAVE_GL_GLUT_H GL/glut.h)
-        find_file(HAVE_GLUT_GLUT_H GLUT/glut.h)
-        include(FindGLUT)
-    endif ()
-
-    if (GLUT_INCLUDE_DIR AND GLUT_LIBRARIES)
-        set(GLUT_FOUND TRUE)
-    endif ()
-
-    if(GLUT_FOUND)
-        message(STATUS "Glut found: '${GLUT_INCLUDE_DIR}', '${GLUT_LIBRARIES}'")
-    else()
-        message(STATUS "Glut include and library variables: '${GLUT_INCLUDE_DIR}', '${GLUT_LIBRARIES}'")
-        message(FATAL_ERROR "Glut not found.  Building without OpenGL is possible.")
-    endif()
-
-    include_directories(${GLUT_INCLUDE_DIR})
-    list(APPEND DEP_LIBS ${GLUT_LIBRARIES})
+    find_package(glfw3 REQUIRED)
+    list(APPEND DEP_LIBS glfw::glfw)
 endif()
 
 
