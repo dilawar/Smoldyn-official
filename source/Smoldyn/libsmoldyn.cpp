@@ -702,6 +702,7 @@ extern CSTRING enum ErrorCode smolAddCommand(simptr sim,char type,double on,doub
 	int er;
 
 	LCHECK(sim,funcname,ECmissing,"missing sim");
+	printf("*** libsmoldyn.cpp: smolAddCommand A\n");//??
 	er=scmdaddcommand(sim->cmds,type,sim->tmin,sim->tmax,sim->dt,on,off,step,multiplier,commandstring);
 	LCHECK(er!=1,funcname,ECmemory,"out of memory creating command");
 	LCHECK(er!=2,funcname,ECbug,"missing sim->cmds");
@@ -750,14 +751,14 @@ extern CSTRING enum ErrorCode smolGetOutputData(simptr sim,char *dataname,int *n
 	LCHECK(did>=0,funcname,ECerror,"no data file of the requested name");
 	list=sim->cmds->data[did];
 
-	datacopy=(double*) calloc(list->nrow*list->ncol,sizeof(double));
-	LCHECK(datacopy,funcname,ECmemory,"out of memory");
-	for(i=0;i<list->nrow;i++)
-		for(j=0;j<list->ncol;j++)
-			datacopy[i*list->ncol+j]=list->data[i*list->maxcol+j];
-	*nrow=list->nrow;
-	*ncol=list->ncol;
-	*array=datacopy;
+    datacopy=(double*) calloc(list->nrow*list->ncol,sizeof(double));
+    LCHECK(datacopy,funcname,ECmemory,"out of memory");
+    for(i=0;i<list->nrow;i++)
+        for(j=0;j<list->ncol;j++)
+            datacopy[i*list->ncol+j]=list->data[i*list->maxcol+j];
+    *nrow=list->nrow;
+    *ncol=list->ncol;
+    *array=datacopy;
 	if(erase) ListClearDD(list);
 
 	return ECok;
