@@ -202,9 +202,6 @@ if(OPTION_USE_LIBTIFF AND NOT OPTION_USE_OPENGL)
     set(OPTION_USE_LIBTIFF OFF)
 endif()
 
-# set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX )
-# set_source_files_properties(${MAIN_FILES} PROPERTIES LANGUAGE CXX )
-
 
 ####### Compiler flags ######################
 
