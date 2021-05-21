@@ -9,7 +9,10 @@ conan_cmake_run(REQUIRES pybind11/2.6.2 BASIC_SETUP CMAKE_TARGETS)
 find_package(pybind11 REQUIRED)
 
 # recompile libsmoldyn for PYTHON module.
-add_library(_pysmoldyn STATIC ${SRC_FILES})
+add_library(_pysmoldyn STATIC ${SRC_FILES}
+    $<TARGET_OBJECTS:Steve>
+    $<TARGET_OBJECTS:nsv>
+    )
 
 target_include_directories(_pysmoldyn PRIVATE ${Python3_INCLUDE_DIRS})
 
