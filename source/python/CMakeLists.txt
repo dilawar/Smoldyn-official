@@ -5,7 +5,8 @@
 # find_package(pybind11 CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-conan_cmake_run(REQUIRES pybind11/2.6.1 BASIC_SETUP CMAKE_TARGETS)
+conan_cmake_run(REQUIRES pybind11/2.6.2 BASIC_SETUP CMAKE_TARGETS)
+find_package(pybind11 REQUIRED)
 
 # recompile libsmoldyn for PYTHON module.
 set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX)
@@ -50,13 +51,13 @@ target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
 # If generator pattern is not used here, cmake produces module in Release/Debug folders
 # which will break the wheels.
 # https://cmake.org/cmake/help/latest/prop_tgt/LIBRARY_OUTPUT_DIRECTORY.html#prop_tgt:LIBRARY_OUTPUT_DIRECTORY
-set_target_properties(_smoldyn PROPERTIES 
+set_target_properties(_smoldyn PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>
     LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_CURRENT_SOURCE_DIR}/smoldyn/>)
 
-target_compile_options(_smoldyn PRIVATE 
-    -DSMOLDYN_VERSION=${SMOLDYN_VERSION} 
-    -DENABLE_PYTHON_CALLBACK 
+target_compile_options(_smoldyn PRIVATE
+    -DSMOLDYN_VERSION=${SMOLDYN_VERSION}
+    -DENABLE_PYTHON_CALLBACK
     # https://pybind11.readthedocs.io/en/stable/faq.html#someclass-declared-with-greater-visibility-than-the-type-of-its-field-someclass-member-wattributes
     -fvisibility=hidden)
 

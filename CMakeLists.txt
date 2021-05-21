@@ -101,7 +101,7 @@ message(STATUS "Option to build documentation: ${OPTION_DOCS}")
 
 
 #
-# conan package manager. 
+# conan package manager.
 #
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_program(CONAN conan HINTS $ENV{HOME}/.local/bin)
@@ -124,8 +124,8 @@ endif(OPTION_NSV)
 
 if(OPTION_USE_LIBTIFF)
     list(APPEND CONAN_LIBS libtiff/4.2.0)
-    list(APPEND CONAN_OPTIONS libtiff:zstd=False 
-        libtiff:jbig=False 
+    list(APPEND CONAN_OPTIONS libtiff:zstd=False
+        libtiff:jbig=False
         libtiff:webp=False
         libtiff:jpeg=False
         libtiff:libdeflate=False)
@@ -142,7 +142,7 @@ endif(OPTION_USE_ICONV)
 #
 # Install using conan
 #
-conan_cmake_configure(REQUIRES ${CONAN_LIBS} 
+conan_cmake_configure(REQUIRES ${CONAN_LIBS}
     GENERATORS cmake_find_package
     OPTIONS ${CONAN_OPTIONS})
 
@@ -225,7 +225,7 @@ macro(CheckCompilerFlagAndAdd)
     endif(FLAG_EXISTS)
 endmacro()
 
-add_definitions(-Wall -Wfatal-errors)
+add_definitions(-Wall)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING
@@ -437,11 +437,6 @@ if(OPTION_USE_ICONV)
     list(APPEND DEP_LIBS Iconv::Iconv)
 endif(OPTION_USE_ICONV)
 
-
-if (OPTION_NSV)
-    add_subdirectory(source/NextSubVolume)
-    include_directories(source/NextSubVolume)
-endif (OPTION_NSV)
 
 if(OPTION_VTK)
     add_definitions(-DHAVE_VTK)
