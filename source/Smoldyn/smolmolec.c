@@ -767,7 +767,7 @@ char *molpos2string(simptr sim,moleculeptr mptr,char *string) {
 			for(d=0;d<dim;d++) {
 				snprintf(line2,STRCHAR*sizeof(line2)," %g",mptr->pos[d]+unirandCCD(-dist,dist));
 				line2+=strlen(line2); }}}
-		
+
 		return string; }
 
 
@@ -984,14 +984,14 @@ int molsetsurfdrift(simptr sim,int ident,int *index,enum MolecState ms,int surfa
 			if(!mols->surfdrift[ident][ms1][s1]) {
 				CHECKMEM(mols->surfdrift[ident][ms1][s1]=(double**) calloc(PSMAX,sizeof(double*)));
 				for(ps1=(enum PanelShape)0;ps1<PSMAX;ps1=(enum PanelShape)(ps1+1)) mols->surfdrift[ident][ms1][s1][ps1]=NULL; }
-			for(ps1=pslo;ps1<pshi;ps1=(PanelShape)(ps1+1)) {
+			for(ps1=pslo;ps1<pshi;ps1=(enum PanelShape)(ps1+1)) {
 				if(!mols->surfdrift[ident][ms1][s1][ps1]) {
 					CHECKMEM(mols->surfdrift[ident][ms1][s1][ps1]=(double*) calloc(dim-1,sizeof(double)));
 					for(d=0;d<dim-1;d++) mols->surfdrift[ident][ms1][s1][ps1][d]=0; }
 
 				for(d=0;d<dim-1;d++)
 					mols->surfdrift[ident][ms1][s1][ps1][d]=drift[d]; }}}
-	
+
 	molsetcondition(sim->mols,SCparams,0);
 	return 0;
 failure:
@@ -1066,7 +1066,7 @@ void molsetlistlookup(simptr sim,int ident,int *index,enum MolecState ms,int ll)
 
 	else {																						// all diffusing or non-diffusing species
 		diffusing=(ident==-7)?1:0;
-		for(i=0;i<sim->mols->nspecies;i++) {
+		for(i=1;i<sim->mols->nspecies;i++) {
 			if(ms==MSsoln || ms==MSbsoln) {
 				if(molismobile(sim,i,MSsoln)==diffusing)
 					sim->mols->listlookup[i][MSsoln]=sim->mols->listlookup[i][MSbsoln]=ll; }
@@ -1579,11 +1579,11 @@ int molexpandsurfdrift(simptr sim,int oldmaxspec,int oldmaxsrf) {	//?? needs to 
 	int i,s;
 	enum MolecState ms;
 	enum PanelShape ps;
-	
+
 	if(!sim->mols->surfdrift) return 0;
 	oldsurfdrift=sim->mols->surfdrift;
 	sim->mols->surfdrift=NULL;
-	
+
 	for(i=0;i<oldmaxspec;i++)
 		if(oldsurfdrift[i])
 			for(ms=(enum MolecState)0;ms<MSMAX;ms=(enum MolecState)(ms+1))
@@ -1593,7 +1593,7 @@ int molexpandsurfdrift(simptr sim,int oldmaxspec,int oldmaxsrf) {	//?? needs to 
 							for(ps=(enum PanelShape)0;ps<PSMAX;ps=(enum PanelShape)(ps+1))
 								if(oldsurfdrift[i][ms][s][ps]) {
 									CHECK(molsetsurfdrift(sim,i,NULL,ms,s,ps,oldsurfdrift[i][ms][s][ps])==0); }
-	
+
 	molfreesurfdrift(oldsurfdrift,oldmaxspec,oldmaxsrf);
 	return 0;
 failure:
@@ -1605,7 +1605,7 @@ void molfreesurfdrift(double *****surfdrift,int maxspec,int maxsrf) {
 	int i,s;
 	enum MolecState ms;
 	enum PanelShape ps;
-	
+
 	if(surfdrift) {
 		for(i=0;i<maxspec;i++)
 			if(surfdrift[i]) {
@@ -1830,7 +1830,7 @@ molssptr molssalloc(molssptr mols,int maxspecies) {
 		mols->listlookup=newlistlookup;
 		free(mols->expand);
 		mols->expand=newexpand;
-	
+
 		if(mols->surfdrift && mols->sim->srfss) {
 			CHECK(molexpandsurfdrift(mols->sim,oldmaxspecies,mols->sim->srfss->maxsrf)==0); }}
 
@@ -2042,7 +2042,7 @@ void molssfree(molssptr mols,int maxsrf) {
 		free(mols->display); }
 
 	molfreesurfdrift(mols->surfdrift,mols->maxspecies,maxsrf);
-	
+
 	if(mols->drift) {
 		for(i=0;i<maxspecies;i++)
 			if(mols->drift[i]) {
@@ -2252,7 +2252,7 @@ void writemols(simptr sim,FILE *fptr) {
 		if(mols->listtype[ll]==MLTsystem)
 			fprintf(fptr,"molecule_lists %s\n",mols->listname[ll]);
 	fprintf(fptr,"\n");
-	
+
 	for(i=1;i<mols->nspecies;i++) {
 		val0=mols->difc[i][0];
 		for(ms=(enum MolecState)(1);ms<MSMAX && mols->difc[i][ms]==val0;ms=(enum MolecState)(ms+1));
@@ -2261,21 +2261,21 @@ void writemols(simptr sim,FILE *fptr) {
 			for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1))
 				if(mols->difc[i][ms]>0)
 					fprintf(fptr,"difc %s(%s) %g\n",spname[i],molms2string(ms,string),mols->difc[i][ms]); }
-		
+
 		for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1)) {
 			if(mols->difm[i][ms]) {
 				fprintf(fptr,"difm %s(%s)",spname[i],molms2string(ms,string));
 				for(d=0;d<dim*dim;d++)
 					fprintf(fptr," %g",mols->difm[i][ms][d]);
 				fprintf(fptr,"\n"); }}
-		
+
 		for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1)) {
 			if(mols->drift[i][ms]) {
 				fprintf(fptr,"drift %s(%s)",spname[i],molms2string(ms,string));
 				for(d=0;d<dim;d++)
 					fprintf(fptr," %g",mols->drift[i][ms][d]);
 				fprintf(fptr,"\n"); }}
-		
+
 		if(mols->nlist) {
 			ll=mols->listlookup[i][0];
 			for(ms=(enum MolecState)(1);ms<MSMAX && mols->listlookup[i][ms]==ll;ms=(enum MolecState)(ms+1));
@@ -2283,14 +2283,14 @@ void writemols(simptr sim,FILE *fptr) {
 			else {
 				for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1))
 					fprintf(fptr,"mol_list %s(%s) %s\n",spname[i],molms2string(ms,string),mols->listname[mols->listlookup[i][ms]]); }}
-		
+
 		val0=mols->display[i][0];
 		for(ms=(enum MolecState)(1);ms<MSMAX && mols->display[i][ms]==val0;ms=(enum MolecState)(ms+1));
 		if(ms==MSMAX) fprintf(fptr,"display_size %s(all) %g\n",spname[i],val0);
 		else {
 			for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1))
 				fprintf(fptr,"display_size %s(%s) %g\n",spname[i],molms2string(ms,string),mols->display[i][ms]); }
-		
+
 		val0=mols->color[i][0][0];
 		val1=mols->color[i][0][1];
 		val2=mols->color[i][0][2];
@@ -2314,7 +2314,7 @@ void writemolecules(simptr sim,FILE *fptr) {
 	if(!mols) return;
 	spname=mols->spname;
 	fprintf(fptr,"# Individual molecules\n");
-	
+
 	for(ll=0;ll<mols->nlist;ll++)
 		if(mols->listtype[ll]==MLTsystem)
 			for(m=0;m<mols->nl[ll];m++) {
@@ -2357,9 +2357,10 @@ int checkmolparams(simptr sim,int *warnptr) {
 			for(m=0;m<mols->nl[ll];m++) {
 				mptr=mols->live[ll][m];
 				if(!mptr) {error++;simLog(sim,10," SMOLDYN BUG: NULL molecule in live list %i at %i\n",ll,m);}
+				else if(!mptr->ident);
 				else if(mptr->list!=mols->listlookup[mptr->ident][mptr->mstate]) {error++;simLog(sim,10," SMOLDYN BUG: molecule list value for species %i (%s) is %i but should be %i\n",mptr->ident,molms2string(mptr->mstate,string),mptr->list,mols->listlookup[mptr->ident][mptr->mstate]);}
-				else if(mptr->list!=ll) {warn++;simLog(sim,9," WARNING: mis-sorted molecule in live list %i at %i\n",ll,m);}
-				else if(!mptr->ident) {warn++;simLog(sim,5," WARNING: empty molecule in live list %i at %i\n",ll,m);} }
+				else if(mptr->list!=ll) {warn++;simLog(sim,9," WARNING: mis-sorted molecule in live list %i at %i\n",ll,m);} }
+				//else if(!mptr->ident) {warn++;simLog(sim,5," WARNING: empty molecule in live list %i at %i\n",ll,m);} }
 			for(;m<mols->maxl[ll];m++) {
 				mptr=mols->live[ll][m];
 				if(mptr) {error++;simLog(sim,10," SMOLDYN BUG: misplaced molecule in live list %i at %i\n",ll,m);} }}
@@ -2557,7 +2558,7 @@ int molgeneratespecies(simptr sim,const char *name,int nparents,int parent1,int 
 			if(sim->srfss) {
 				for(s=0;s<sim->srfss->nsrf;s++) {
 					srf=sim->srfss->srflist[s];
-					for(face=(enum PanelFace)0;face<=PFnone;face=(PanelFace)(face+1)) {
+					for(face=(enum PanelFace)0;face<=PFnone;face=(enum PanelFace)(face+1)) {
 						surfsetaction(srf,i,NULL,ms,face,srf->action[parent1][ms][face],-1);
 						if(srf->action[parent1][ms][face]==SAmult) {
 							for(ms4=(enum MolecState)0;ms4<(enum MolecState)MSMAX1;ms4=(enum MolecState)(ms4+1)) {
@@ -2588,7 +2589,7 @@ int molgeneratespecies(simptr sim,const char *name,int nparents,int parent1,int 
 			if(sim->srfss) {
 				for(s=0;s<sim->srfss->nsrf;s++) {
 					srf=sim->srfss->srflist[s];
-					for(face=(enum PanelFace)0;face<=PFnone;face=(PanelFace)(face+1)) {
+					for(face=(enum PanelFace)0;face<=PFnone;face=(enum PanelFace)(face+1)) {
 						act1=srf->action[parent1][ms][face];
 						act2=srf->action[parent2][ms][face];
 						det1=srf->actdetails[parent1][ms][face];
@@ -2629,7 +2630,7 @@ int molsupdatelists(simptr sim) {
 	enum MolecState ms;
 	molssptr mols;
 	moleculeptr mptr;
-	
+
 	mols=sim->mols;
 
 	er=molssetgausstable(sim,-1);				// gaussian lookup table
@@ -2670,7 +2671,7 @@ int molsupdatelists(simptr sim) {
 			molsetlistlookup(sim,-8,NULL,MSall,ll); }}
 
 	ok=1;															// set any list lookup values that weren't done yet
-	for(i=0;i<mols->nspecies && ok;i++)
+	for(i=1;i<mols->nspecies && ok;i++)
 		for(ms=(enum MolecState)(0);ms<MSMAX && ok;ms=(enum MolecState)(ms+1))
 			if(mols->listlookup[i][ms]<0)
 				ok=0;
@@ -2679,7 +2680,7 @@ int molsupdatelists(simptr sim) {
 		if(ll<0) {
 			ll=addmollist(sim,"unassignedlist",MLTsystem);
 			if(ll<0) return 1; }
-		for(i=0;i<mols->nspecies;i++)
+		for(i=1;i<mols->nspecies;i++)
 			for(ms=(enum MolecState)(0);ms<MSMAX;ms=(enum MolecState)(ms+1))
 				if(mols->listlookup[i][ms]<0)
 					molsetlistlookup(sim,i,NULL,ms,ll); }
@@ -2835,7 +2836,7 @@ int addsurfmol(simptr sim,int nmol,int ident,enum MolecState ms,double *pos,pane
 		pindex=0;																						// fill in area lookup tables
 		area=0;
 		for(s=slo;s<shi;s++)
-			for(ps=PanelShape(pslo);ps<pshi;ps=PanelShape(ps + 1)) {
+			for(ps=(enum PanelShape)pslo;ps<(enum PanelShape)pshi;ps=(enum PanelShape)(ps+1)) {
 				srf=sim->srfss->srflist[s];
 				if(!pname || !strcmp(pname,"all")) {plo=0;phi=srf->npanel[ps];}
 				else if((panel=stringfind(srf->pname[ps],srf->npanel[ps],pname))<0) plo=phi=0;
@@ -2962,15 +2963,18 @@ int molsort(simptr sim,int onlydead2live) {
 
 	for(m=mols->topd;m<mols->nd;m++) {		// move molecules from resurrected to reborn
 		mptr=dead[m];
-		ll2=mptr->list;
-		if(nl[ll2]==maxl[ll2])
-			if(molexpandlist(mols,sim->dim,ll2,-1,0)) {
-				simLog(sim,10,"out of memory in molsort\n");return 1;}
-		live[ll2][nl[ll2]++]=mptr;
-		dead[m]=NULL;
-		if(listtype[ll2]==MLTsystem) {
-			if(boxaddmol(mptr,ll2)) {
-				simLog(sim,10,"out of memory in molsort\n");return 1;} }}
+		if(mptr->ident==0) {
+			dead[mols->topd++]=mptr; }
+		else {
+			ll2=mptr->list;
+			if(nl[ll2]==maxl[ll2])
+				if(molexpandlist(mols,sim->dim,ll2,-1,0)) {
+					simLog(sim,10,"out of memory in molsort\n");return 1;}
+			live[ll2][nl[ll2]++]=mptr;
+			dead[m]=NULL;
+			if(listtype[ll2]==MLTsystem) {
+				if(boxaddmol(mptr,ll2)) {
+					simLog(sim,10,"out of memory in molsort\n");return 1;} }}}
 	mols->nd=mols->topd;
 
   if(!onlydead2live) {

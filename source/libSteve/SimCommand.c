@@ -19,16 +19,26 @@ of the Gnu Lesser General Public License (LGPL). */
 
 #if defined(SMOLDYN)
 	#include "smoldynfuncs.h"
-	#define SCMDPRINTF(A,...) simLog(NULL,A,__VA_ARGS__)
+	#define SCMDPRINTF(S,A,...) simLog((simptr) S,A,__VA_ARGS__)
 #else
-	#define SCMDPRINTF(A,...) printf(__VA_ARGS__)
+	#define SCMDPRINTF(S,A,...) printf(__VA_ARGS__)
 #endif
 
 
 void scmdcatfname(cmdssptr cmds,int fid,char *str);
+void scmdcopycommand(cmdptr cmdfrom,cmdptr cmdto);
+char *scmdcode2string(enum CMDcode code,char *string);
+
+cmdptr scmdalloc(void);
+void scmdfree(cmdptr cmd);
+int scmdcmdlistalloc(cmdssptr cmds,int newspaces);
+int scmdqalloc(cmdssptr cmds,int n);
+int scmdqalloci(cmdssptr cmds,int n);
+
+void scmddocommandtiming(cmdptr cmd,double tmin,double tmax,double dt,int iter);
 
 
-/* ***** internal routine ***** */
+/* ***** Utility functions ***** */
 
 /* scmdcatfname */
 void scmdcatfname(cmdssptr cmds,int fid,char *str) {
@@ -39,7 +49,7 @@ void scmdcatfname(cmdssptr cmds,int fid,char *str) {
 	strncat(str,cmds->froot,STRCHAR-strlen(str));
 	dot=strrchr(cmds->fname[fid],'.');
 	if(dot)	{
-		min=STRCHAR-strlen(str)<(unsigned int)(dot-cmds->fname[fid])?STRCHAR-strlen(str):dot-cmds->fname[fid];
+		min=STRCHAR-strlen(str)<(unsigned int)(dot-cmds->fname[fid])?STRCHAR-strlen(str):(unsigned int)(dot-cmds->fname[fid]);
 		strncat(str,cmds->fname[fid],min); }
 	else strncat(str,cmds->fname[fid],STRCHAR);
 	if(cmds->fsuffix[fid] && STRCHAR-strlen(str)>4) snprintf(str+strlen(str),sizeof(str)-strlen(str),"_%03i",cmds->fsuffix[fid]);
@@ -47,7 +57,28 @@ void scmdcatfname(cmdssptr cmds,int fid,char *str) {
 	return; }
 
 
-/* ***** external routines ***** */
+/* scmdcopycommand */
+void scmdcopycommand(cmdptr cmdfrom,cmdptr cmdto) {
+	if(!cmdfrom || !cmdto || cmdfrom==cmdto) return;
+	cmdto->cmds=cmdfrom->cmds;
+	cmdto->twin=cmdfrom;
+	cmdto->timing=cmdfrom->timing;
+	cmdto->on=cmdfrom->on;
+	cmdto->off=cmdfrom->off;
+	cmdto->dt=cmdfrom->dt;
+	cmdto->xt=cmdfrom->xt;
+	cmdto->oni=cmdfrom->oni;
+	cmdto->offi=cmdfrom->offi;
+	cmdto->dti=cmdfrom->dti;
+	cmdto->invoke=0;
+	strncpy(cmdto->str,cmdfrom->str,STRCHAR);
+	strncpy(cmdto->erstr,"",STRCHAR);
+	cmdto->i1=cmdto->i2=cmdto->i3=0;
+	cmdto->f1=cmdto->f2=cmdto->f3=0;
+	cmdto->v1=cmdto->v2=cmdto->v3=NULL;
+	cmdto->freefn=NULL;
+	return; }
+
 
 /* scmdcode2string */
 char *scmdcode2string(enum CMDcode code,char *string) {
@@ -63,6 +94,8 @@ char *scmdcode2string(enum CMDcode code,char *string) {
 	return string; }
 
 
+/* Memory management */
+
 /* scmdalloc */
 cmdptr scmdalloc(void) {
 	cmdptr cmd;
@@ -70,6 +103,8 @@ cmdptr scmdalloc(void) {
 	cmd=(cmdptr) malloc(sizeof(struct cmdstruct));
 	if(!cmd) return NULL;
 	cmd->cmds=NULL;
+	cmd->twin=NULL;
+	cmd->timing='?';
 	cmd->on=cmd->off=cmd->dt=cmd->xt=0;
 	cmd->oni=cmd->offi=cmd->dti=0;
 	cmd->invoke=0;
@@ -96,16 +131,20 @@ void scmdfree(cmdptr cmd) {
 
 
 /* scmdssalloc */
-cmdssptr scmdssalloc(enum CMDcode (*cmdfn)(void*,cmdptr,char*),void *cmdfnarg,const char *root) {
+cmdssptr scmdssalloc(enum CMDcode (*cmdfn)(void*,cmdptr,char*),void *simvd,const char *root) {
 	cmdssptr cmds;
 
 	cmds=(cmdssptr) malloc(sizeof(struct cmdsuperstruct));
 	if(!cmds) return NULL;
 
+	cmds->condition=0;
+	cmds->cmdlist=NULL;
+	cmds->maxcmdlist=0;
+	cmds->ncmdlist=0;
 	cmds->cmd=NULL;
 	cmds->cmdi=NULL;
 	cmds->cmdfn=cmdfn;
-	cmds->cmdfnarg=cmdfnarg;
+	cmds->simvd=simvd;
 	cmds->iter=0;
 
 	cmds->flag=0;
@@ -133,9 +172,9 @@ cmdssptr scmdssalloc(enum CMDcode (*cmdfn)(void*,cmdptr,char*),void *cmdfnarg,co
 
 /* scmdssfree */
 void scmdssfree(cmdssptr cmds) {
-	cmdptr cmd;
+	int fid,did,i;
 	void *voidptr;
-	int fid,did;
+	cmdptr cmd;
 
 	if(!cmds) return;
 
@@ -150,6 +189,11 @@ void scmdssfree(cmdssptr cmds) {
 			cmd=(cmdptr)voidptr;
 			scmdfree(cmd); }
 		q_free(cmds->cmdi,0,0); }
+
+	if(cmds->cmdlist) {
+		for(i=0;i<cmds->ncmdlist;i++)
+			scmdfree(cmds->cmdlist[i]);
+		free(cmds->cmdlist); }
 
 	for(fid=0;fid<cmds->nfile;fid++)
 		if(cmds->fptr && cmds->fptr[fid]) fclose(cmds->fptr[fid]);
@@ -168,6 +212,29 @@ void scmdssfree(cmdssptr cmds) {
 
 	free(cmds);
 	return; }
+
+
+/* scmdcmdlistalloc */
+int scmdcmdlistalloc(cmdssptr cmds,int newspaces) {
+	int i,newmax;
+	cmdptr *newcmdlist;
+
+	if(!cmds) return 0;
+	if(newspaces<=0) return 0;
+	newmax=cmds->maxcmdlist+newspaces;
+	newcmdlist=(cmdptr*) calloc(newmax,sizeof(cmdptr));
+	if(!newcmdlist) return 1;
+
+	for(i=0;i<cmds->ncmdlist;i++)
+		newcmdlist[i]=cmds->cmdlist[i];
+	for(;i<newmax;i++)
+		newcmdlist[i]=NULL;
+
+	if(cmds->cmdlist)
+		free(cmds->cmdlist);
+	cmds->cmdlist=newcmdlist;
+	cmds->maxcmdlist=newmax;
+	return 0; }
 
 
 /* scmdqalloc */
@@ -190,162 +257,194 @@ int scmdqalloci(cmdssptr cmds,int n) {
 	return 0; }
 
 
+/* scmdsetcondition */
+void scmdsetcondition(cmdssptr cmds,int cond,int upgrade) {
+	if(!cmds) return;
+	if(upgrade==0 && cmds->condition>cond) cmds->condition=cond;
+	else if(upgrade==1 && cmds->condition<cond) cmds->condition=cond;
+	else if(upgrade==2) cmds->condition=cond;
+	return; }
+
+
 /* scmdaddcommand */
-int scmdaddcommand(cmdssptr cmds,char ch,double tmin,double tmax,double dt,double on,double off,double step,double multiplier,const char *commandstring) {
+int scmdaddcommand(cmdssptr cmds,char timing,double on,double off,double step,double multiplier,const char *commandstring) {
 	cmdptr cmd;
+	int er;
 
 	if(!cmds) return 2;
-	if(!commandstring) return 0;
+	if(!commandstring || strlen(commandstring)==0) return 3;
 	if(!(cmd=scmdalloc())) return 1;
 	cmd->cmds=cmds;
+	cmd->timing=timing;
+	if(strchr("baBAEe",timing));
+	else if(strchr("@",timing))
+		cmd->on=cmd->off=on;
+	else if(strchr("i",timing)) {
+		cmd->on=on;
+		cmd->off=off;
+		cmd->dt=step; }
+	else if(strchr("x",timing)) {
+		cmd->on=on;
+		cmd->off=off;
+		cmd->dt=step;
+		cmd->xt=multiplier; }
+	else if(strchr("&",timing)) {
+		cmd->oni=cmd->offi=(Q_LONGLONG)on;
+		cmd->dti=1; }
+	else if(strchr("Ij",timing)) {
+		cmd->oni=(Q_LONGLONG)on;
+		cmd->offi=(Q_LONGLONG)off;
+		cmd->dti=(Q_LONGLONG)step; }
+	else if(strchr("Nn",timing))
+		cmd->dti=(Q_LONGLONG)step;
+	else {
+		scmdfree(cmd);
+		return 6; }
 
-	if(ch=='b' || ch=='a' || ch=='@' || ch=='i' || ch=='x') {
-		cmd->dt=dt;
-		if(ch=='b') cmd->on=cmd->off=tmin-dt;
-		else if(ch=='a') cmd->on=cmd->off=tmax+dt;
-		else if(ch=='@') {
-			cmd->on=on;
-			cmd->off=cmd->on; }
-		else if(ch=='i') {
-			cmd->on=on;
-			cmd->off=off;
-			cmd->dt=step;
-			if(cmd->on<tmin) cmd->on=tmin;
-			if(cmd->off>tmax) cmd->off=tmax;
-			if(cmd->dt<=0) return 5; }
-		else if(ch=='x') {
-			cmd->on=on;
-			cmd->off=off;
-			cmd->dt=step;
-			cmd->xt=multiplier;
-			if(cmd->on<tmin) cmd->on=tmin;
-			if(cmd->off>tmax) cmd->off=tmax;
-			if(cmd->dt<=0) return 5;
-			if(cmd->xt<=1) return 8; }
-		if(!cmds->cmd)
-			if(scmdqalloc(cmds,10)==1) {scmdfree(cmd);return 7;}
-		if(q_insert(NULL,0,cmd->on,0,(void*)cmd,cmds->cmd)==1)
-			if(q_expand(cmds->cmd,q_length(cmds->cmd))) {scmdfree(cmd);return 7; }}
-	
-	else if(ch=='B' || ch=='A' || ch=='&' || ch=='j' || ch=='I' || ch=='E' || ch=='N' || ch=='e' || ch=='n') {
-		cmd->oni=0;
-		if(dt==0 || tmin>=tmax) cmd->offi=Q_LLONG_MAX;
-		else cmd->offi=(Q_LONGLONG)((tmax-tmin)/dt+0.5);
-		cmd->dti=1;
-		if(ch=='B') cmd->oni=cmd->offi=-1;
-		else if(ch=='A') cmd->oni=cmd->offi=(cmd->offi==Q_LLONG_MAX?cmd->offi:cmd->offi+1);
-		else if(ch=='&') {
-			cmd->oni=(Q_LONGLONG)on;
-			cmd->offi=cmd->oni; }
-		else if(ch=='j' || ch=='I') {
-			cmd->oni=(Q_LONGLONG)on;
-			cmd->offi=(Q_LONGLONG)off;
-			cmd->dti=(Q_LONGLONG)step;
-			if(cmd->dti<=0) return 5; }
-		else if(ch=='e' || ch=='E');
-		else if(ch=='n' || ch=='N') {
-			cmd->dti=(Q_LONGLONG)step;
-			if(cmd->dti<1) return 5; }
-		if(!cmds->cmdi)
-			if(scmdqalloci(cmds,10)==1) {scmdfree(cmd);return 7;}
-		if(q_insert(NULL,0,0,cmd->oni,(void*)cmd,cmds->cmdi)==1)
-			if(q_expand(cmds->cmdi,q_length(cmds->cmdi))) {scmdfree(cmd);return 7; }}
-	
-	else return 6;
 	strncpy(cmd->str,commandstring,STRCHAR);
 	if(cmd->str[strlen(cmd->str)-1]=='\n')
 		cmd->str[strlen(cmd->str)-1]='\0';
+
+	if(cmds->ncmdlist==cmds->maxcmdlist) {
+		er=scmdcmdlistalloc(cmds,1+cmds->maxcmdlist);
+		if(er) {scmdfree(cmd);return 1;} }
+	cmds->cmdlist[cmds->ncmdlist]=cmd;
+	cmds->ncmdlist++;
+	scmdsetcondition(cmds,2,0);
 	return 0; }
 
 
 /* scmdstr2cmd */
-int scmdstr2cmd(cmdssptr cmds,char *line2,double tmin,double tmax,double dt,char **varnames,double *varvalues,int nvar) {
-	int itct,i1;
-	char ch;
-	cmdptr cmd;
+int scmdstr2cmd(cmdssptr cmds,char *line2,char **varnames,double *varvalues,int nvar) {
+	int itct,er;
+	char timing;
+	double on,off,step,multiplier;
 
 	if(!cmds) return 2;
-	if(!line2) return 0;
-	if(!(cmd=scmdalloc())) return 1;
-	cmd->cmds=cmds;
-	itct=sscanf(line2,"%c",&ch);
+	if(!line2) return 3;
+
+	on=off=step=multiplier=0;
+	itct=sscanf(line2,"%c",&timing);
 	if(itct!=1) return 3;
 	if(!(line2=strnword(line2,2))) return 3;
-
-	if(strchr("ba@ix",ch)) {
-		cmd->dt=dt;
-		if(ch=='b') cmd->on=cmd->off=tmin-dt;
-		else if(ch=='a') cmd->on=cmd->off=tmax+dt;
-		else if(ch=='@') {
-			itct=strmathsscanf(line2,"%mlg",varnames,varvalues,nvar,&cmd->on);
-			if(itct!=1) return 3;
-			cmd->off=cmd->on;
-			if(!(line2=strnword(line2,2))) return 4; }
-		else if(ch=='i') {
-			itct=strmathsscanf(line2,"%mlg %mlg %mlg",varnames,varvalues,nvar,&cmd->on,&cmd->off,&cmd->dt);
-			if(itct!=3) return 3;
-			if(cmd->on<tmin) cmd->on=tmin;
-			if(cmd->off>tmax) cmd->off=tmax;
-			if(cmd->dt<=0) return 5;
-			if(!(line2=strnword(line2,4))) return 4; }
-		else if(ch=='x') {
-			itct=strmathsscanf(line2,"%mlg %mlg %mlg %mlg",varnames,varvalues,nvar,&cmd->on,&cmd->off,&cmd->dt,&cmd->xt);
-			if(itct!=4) return 3;
-			if(cmd->on<tmin) cmd->on=tmin;
-			if(cmd->off>tmax) cmd->off=tmax;
-			if(cmd->dt<=0) return 5;
-			if(cmd->xt<=1) return 8;
-			if(!(line2=strnword(line2,5))) return 4; }
-		if(!cmds->cmd)
-			if(scmdqalloc(cmds,10)==1) {scmdfree(cmd);return 7;}
-		if(q_insert(NULL,0,cmd->on,0,(void*)cmd,cmds->cmd)==1)
-			if(q_expand(cmds->cmd,q_length(cmds->cmd))) {scmdfree(cmd);return 7; }}
-
-	else if(strchr("BA&jIENen",ch)) {
-		cmd->oni=0;
-		if(dt==0 || tmin>=tmax) cmd->offi=Q_LLONG_MAX;
-		else cmd->offi=(Q_LONGLONG)((tmax-tmin)/dt+0.5);
-		cmd->dti=1;
-		if(ch=='B') cmd->oni=cmd->offi=-1;
-		else if(ch=='A') cmd->oni=cmd->offi=(cmd->offi==Q_LLONG_MAX?cmd->offi:cmd->offi+1);
-		else if(ch=='&') {
-			itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-			if(itct!=1) return 3;
-			cmd->oni=i1;
-			cmd->offi=cmd->oni;
-			if(!(line2=strnword(line2,2))) return 4; }
-		else if(ch=='j' || ch=='I') {
-			itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-			if(itct!=1) return 3;
-			cmd->oni=i1;
-			if(!(line2=strnword(line2,2))) return 4;
-			itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-			if(itct!=1) return 3;
-			cmd->offi=i1;
-			if(!(line2=strnword(line2,2))) return 4;
-			itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-			if(itct!=1) return 3;
-			cmd->dti=i1;
-			if(cmd->dti<=0) return 5;
-			if(!(line2=strnword(line2,2))) return 4; }
-		else if(ch=='e' || ch=='E');
-		else if(ch=='n' || ch=='N') {
-			itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-			if(itct!=1) return 3;
-			cmd->dti=i1;
-			if(cmd->dti<1) return 5;
-			if(!(line2=strnword(line2,2))) return 4; }
-		if(!cmds->cmdi)
-			if(scmdqalloci(cmds,10)==1) {scmdfree(cmd);return 7;}
-		if(q_insert(NULL,0,0,cmd->oni,(void*)cmd,cmds->cmdi)==1)
-			if(q_expand(cmds->cmdi,q_length(cmds->cmdi))) {scmdfree(cmd);return 7; }}
-
+	if(strchr("baBAEe",timing));
+	else if(strchr("@&",timing)) {
+		itct=strmathsscanf(line2,"%mlg",varnames,varvalues,nvar,&on);
+		if(itct!=1) return 3;
+		if(!(line2=strnword(line2,2))) return 3; }
+	else if(strchr("Nn",timing)) {
+		itct=strmathsscanf(line2,"%mlg",varnames,varvalues,nvar,&step);
+		if(itct!=1) return 3;
+		if(!(line2=strnword(line2,2))) return 3; }
+	else if(strchr("iIj",timing)) {
+		itct=strmathsscanf(line2,"%mlg %mlg %mlg",varnames,varvalues,nvar,&on,&off,&step);
+		if(itct!=3) return 3;
+		if(!(line2=strnword(line2,4))) return 3; }
+	else if(strchr("x",timing)) {
+		itct=strmathsscanf(line2,"%mlg %mlg %mlg %mlg",varnames,varvalues,nvar,&on,&off,&step,&multiplier);
+		if(itct!=4) return 3;
+		if(!(line2=strnword(line2,5))) return 3; }
 	else return 6;
-	strncpy(cmd->str,line2,STRCHAR);
-	if(cmd->str[strlen(cmd->str)-1]=='\n')
-		cmd->str[strlen(cmd->str)-1]='\0';
+
+	er=scmdaddcommand(cmds,timing,on,off,step,multiplier,line2);
+	return er; }
+
+
+/* scmddocommandtiming */
+void scmddocommandtiming(cmdptr cmd,double tmin,double tmax,double dt,int iter) {
+	char timing;
+
+	timing=cmd->timing;
+	if(timing=='b') {
+		cmd->on=cmd->off=tmin-dt;
+		cmd->dt=dt; }
+	else if(timing=='a') {
+		cmd->on=cmd->off=tmax+dt;
+		cmd->dt=dt; }
+	else if(timing=='@') {
+		cmd->dt=dt; }
+	else if(timing=='i') {
+		if(cmd->on<tmin) cmd->on=tmin;
+		if(cmd->off>tmax) cmd->off=tmax; }
+	else if(timing=='x') {
+		if(cmd->on<tmin) cmd->on=tmin;
+		if(cmd->off>tmax) cmd->off=tmax; }
+	else if(timing=='B') {
+		cmd->oni=cmd->offi=iter-1;
+		cmd->dti=1; }
+	else if(timing=='A') {
+		cmd->oni=cmd->offi=iter+(Q_LONGLONG)((tmax-tmin)/dt+0.5)+1;
+		cmd->dti=1; }
+	else if(timing=='&');
+	else if(strchr("Ij",timing)) {
+		if(cmd->oni<0) cmd->oni=iter+1; }
+	else if(strchr("Ee",timing)) {
+		cmd->oni=iter;
+		cmd->offi=iter+(Q_LONGLONG)((tmax-tmin)/dt+0.5);
+		cmd->dti=1; }
+	else if(strchr("Nn",timing)) {
+		cmd->oni=iter;
+		cmd->offi=iter+(Q_LONGLONG)((tmax-tmin)/dt+0.5); }
+
+	return; }
+
+
+/* scmdupdatecommands */
+int scmdupdatecommands(cmdssptr cmds,double tmin,double tmax,double dt) {
+	int i;
+	char timing;
+	cmdptr cmd,cmdtemplate;
+	void *voidptr;
+
+	if(!cmds || !cmds->cmdlist) return 0;
+	if(cmds->condition==3) return 0;		// already ready to simulate
+	if(dt<=0 || tmax<tmin) return 0;		// can't assign times to commands
+
+	if(cmds->condition==0) {
+		if(cmds->cmd) {
+			while(q_pop(cmds->cmd,NULL,NULL,NULL,NULL,&voidptr)>=0) {
+				cmd=(cmdptr)voidptr;
+				scmdfree(cmd); }}
+		if(cmds->cmdi) {
+			while(q_pop(cmds->cmdi,NULL,NULL,NULL,NULL,&voidptr)>=0) {
+				cmd=(cmdptr)voidptr;
+				scmdfree(cmd); }}
+		for(i=0;i<cmds->ncmdlist;i++) {
+			cmdtemplate=cmds->cmdlist[i];
+			cmdtemplate->twin=NULL;
+			cmdtemplate->invoke=0; }}
+
+	for(i=0;i<cmds->ncmdlist;i++) {
+		cmdtemplate=cmds->cmdlist[i];
+		if(!cmdtemplate->twin && cmdtemplate->invoke==0) {
+			cmd=scmdalloc();
+			if(!cmd) return 1;
+			scmdcopycommand(cmdtemplate,cmd);
+			scmddocommandtiming(cmd,tmin,tmax,dt,cmds->iter);
+			timing=cmd->timing;
+			if(strchr("ba@ix",timing)) {
+				if(!cmds->cmd)
+					if(scmdqalloc(cmds,10)==1) {scmdfree(cmd);return 1;}
+				if(q_insert(NULL,0,cmd->on,0,(void*)cmd,cmds->cmd)==1)
+					if(q_expand(cmds->cmd,q_length(cmds->cmd))) {scmdfree(cmd);return 1; }}
+			else if(strchr("BA&jIENen",timing)) {
+				if(!cmds->cmdi)
+					if(scmdqalloci(cmds,10)==1) {scmdfree(cmd);return 1;}
+				if(q_insert(NULL,0,0,cmd->oni,(void*)cmd,cmds->cmdi)==1)
+					if(q_expand(cmds->cmdi,q_length(cmds->cmdi))) {scmdfree(cmd);return 1; }}
+			else {
+				scmdfree(cmd);
+				return 6; }
+			cmdtemplate->twin=cmd;
+			cmdtemplate->invoke=1; }
+		else if(cmds->condition==1) {
+			cmd=cmdtemplate->twin;
+			if(cmd)
+				scmddocommandtiming(cmd,tmin,tmax,dt,cmds->iter); }}
+
+	scmdsetcondition(cmds,3,1);
 	return 0; }
- 
+
 
 /* scmdpop */
 void scmdpop(cmdssptr cmds,double t) {
@@ -356,6 +455,7 @@ void scmdpop(cmdssptr cmds,double t) {
 	while(q_length(cmds->cmd)>0 && q_frontkeyD(cmds->cmd)<=t) {
 		q_pop(cmds->cmd,NULL,NULL,NULL,NULL,&voidptr);
 		cmd=(cmdptr)voidptr;
+		cmd->twin->twin=NULL;
 		scmdfree(cmd); }
 	return; }
 
@@ -365,26 +465,29 @@ enum CMDcode scmdexecute(cmdssptr cmds,double time,double simdt,Q_LONGLONG iter,
 	enum CMDcode code1,code2;
 	cmdptr cmd;
 	double dt;
-	void *voidptr;
+	void *voidptr,*simvd;
 
 	if(!cmds) return CMDok;
 	code2=CMDok;
 	if(iter<0) iter=cmds->iter++;
 	else cmds->iter=iter;
+	simvd=cmds->simvd;
 
 	if(cmds->cmdi)			// integer execution times
 		while((q_length(cmds->cmdi)>0) && (q_frontkeyL(cmds->cmdi)<=iter || donow)) {
 			q_pop(cmds->cmdi,NULL,NULL,NULL,NULL,&voidptr);
 			cmd=(cmdptr)voidptr;
 			cmd->invoke++;
-			code1=(*cmds->cmdfn)(cmds->cmdfnarg,cmd,cmd->str);
+			code1=(*cmds->cmdfn)(cmds->simvd,cmd,cmd->str);
 			if(code1==CMDwarn) {
-				if(strlen(cmd->erstr)) SCMDPRINTF(7,"command '%s' error: %s\n",cmd->str,cmd->erstr);
-				else SCMDPRINTF(7,"error with command: '%s'\n",cmd->str); }
+				if(strlen(cmd->erstr)) SCMDPRINTF(simvd,7,"command '%s' error: %s\n",cmd->str,cmd->erstr);
+				else SCMDPRINTF(simvd,7,"error with command: '%s'\n",cmd->str); }
 			if(cmd->oni+cmd->dti<=cmd->offi && !donow && (code1==CMDok || code1==CMDpause)) {
 				cmd->oni+=cmd->dti;
 				q_insert(NULL,0,0,cmd->oni,(void*)cmd,cmds->cmdi); }
-			else scmdfree(cmd);
+			else {
+				cmd->twin->twin=NULL;
+				scmdfree(cmd); }
 			if(code1==CMDabort) return code1;
 			if(code1>code2) code2=code1; }
 
@@ -393,16 +496,18 @@ enum CMDcode scmdexecute(cmdssptr cmds,double time,double simdt,Q_LONGLONG iter,
 			q_pop(cmds->cmd,NULL,NULL,NULL,NULL,&voidptr);
 			cmd=(cmdptr)voidptr;
 			cmd->invoke++;
-			code1=(*cmds->cmdfn)(cmds->cmdfnarg,cmd,cmd->str);
+			code1=(*cmds->cmdfn)(cmds->simvd,cmd,cmd->str);
 			if(code1==CMDwarn) {
-				if(strlen(cmd->erstr)) SCMDPRINTF(7,"command '%s' error: %s\n",cmd->str,cmd->erstr);
-				else SCMDPRINTF(7,"error with command: '%s'\n",cmd->str); }
+				if(strlen(cmd->erstr)) SCMDPRINTF(simvd,7,"command '%s' error: %s\n",cmd->str,cmd->erstr);
+				else SCMDPRINTF(simvd,7,"error with command: '%s'\n",cmd->str); }
 			dt=(cmd->dt>=simdt)?cmd->dt:simdt;
 			if(cmd->on+dt<=cmd->off && !donow && (code1==CMDok || code1==CMDpause)) {
 				cmd->on+=dt;
 				if(cmd->xt>1) cmd->dt*=cmd->xt;
 				q_insert(NULL,0,cmd->on,0,(void*)cmd,cmds->cmd); }
-			else scmdfree(cmd);
+			else {
+				cmd->twin->twin=NULL;
+				scmdfree(cmd); }
 			if(code1==CMDabort) return code1;
 			if(code1>code2) code2=code1; }
 
@@ -415,58 +520,7 @@ enum CMDcode scmdcmdtype(cmdssptr cmds,cmdptr cmd) {
 
 	sscanf(cmd->str,"%s",string);
 	strncat(string," cmdtype",STRCHAR-strlen(string));
-	return (*cmds->cmdfn)(cmds->cmdfnarg,cmd,string); }
-
-
-/* scmdnextcmdtime */
-int scmdnextcmdtime(cmdssptr cmds,double time,Q_LONGLONG iter,enum CMDcode type,int equalok,double *timeptr,Q_LONGLONG *iterptr) {
-	double tbest,t,dt;
-	int i,ans,done;
-	Q_LONGLONG dti,it,itbest;
-	cmdptr cmd;
-	enum CMDcode cmdtype;
-	void *voidptr;
-
-	if(!cmds) return 0;
-	ans=0;
-	tbest=time-1;
-	itbest=iter-1;
-
-	if(cmds->cmdi) {
-		i=-1;
-		done=0;
-		while(!done && (i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmds->cmdi))>=0) {
-			cmd=(cmdptr)voidptr;
-			if(type==CMDall || (cmdtype=scmdcmdtype(cmds,cmd))==type || (type==CMDctrlORobs && (cmdtype==CMDcontrol || cmdtype==CMDobserve))) {
-				it=cmd->oni;
-				dti=cmd->dti;
-				if((equalok && it>=iter) || (!equalok && it>iter)) done=1;
-				while(((equalok && it<iter) || (!equalok && it<=iter)) && it<=cmd->offi) it+=dti;
-				if(it<=cmd->offi)
-					if(itbest<iter || it<itbest) {
-						ans|=1;
-						itbest=it; }}}}
-
-	if(cmds->cmd) {
-		i=-1;
-		done=0;
-		while(!done && (i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmds->cmd))>=0) {
-			cmd=(cmdptr)voidptr;
-			if(type==CMDall || (cmdtype=scmdcmdtype(cmds,cmd))==type || (type==CMDctrlORobs && (cmdtype==CMDcontrol || cmdtype==CMDobserve))) {
-				t=cmd->on;
-				dt=cmd->dt;
-				if((equalok && t>=time) || (!equalok && t>time)) done=1;
-				while(((equalok && t<time) || (!equalok && t<=time)) && t<=cmd->off) {
-					t+=dt;
-					if(cmd->xt>1) dt*=cmd->xt; }
-				if(t<=cmd->off)
-					if(tbest<time || t<tbest) {
-						ans|=2;
-						tbest=t; }}}}
-
-	if(timeptr) *timeptr=tbest;
-	if(iterptr) *iterptr=itbest;
-	return ans; }
+	return (*cmds->cmdfn)(cmds->simvd,cmd,string); }
 
 
 /* scmdoutput */
@@ -474,59 +528,83 @@ void scmdoutput(cmdssptr cmds) {
 	int fid,i,did;
 	queue cmdq;
 	cmdptr cmd;
-	void* voidptr;
-	char string[STRCHAR],string2[STRCHAR];
+	void *voidptr,*simvd;
+	char timing,string[STRCHAR],string2[STRCHAR];
 
-	SCMDPRINTF(2,"RUNTIME COMMAND INTERPRETER\n");
+	simvd=cmds?cmds->simvd:NULL;
+	SCMDPRINTF(simvd,2,"RUNTIME COMMAND INTERPRETER\n");
 	if(!cmds) {
-		SCMDPRINTF(2," No command superstructure defined\n\n");
+		SCMDPRINTF(simvd,2," No command superstructure defined\n\n");
 		return; }
-	if(!cmds->cmdfn) SCMDPRINTF(10," ERROR: Command executer undefined");
-	if(!cmds->cmdfnarg) SCMDPRINTF(10," WARNING: No argument for command executer");
-	if(cmds->iter) SCMDPRINTF(2," Commands iteration counter: %i\n",cmds->iter);
+	if(!cmds->cmdfn) SCMDPRINTF(simvd,10," ERROR: Command executer undefined");
+	if(!cmds->simvd) SCMDPRINTF(simvd,10," WARNING: No argument for command executer");
+	if(cmds->iter) SCMDPRINTF(simvd,2," Commands iteration counter: %i\n",cmds->iter);
 	if(cmds->nfile) {
-		SCMDPRINTF(2," Output file root: '%s%s'\n",cmds->root,cmds->froot);
-		SCMDPRINTF(2," Output file paths and names:\n"); }
+		SCMDPRINTF(simvd,2," Output file root: '%s%s'\n",cmds->root,cmds->froot);
+		SCMDPRINTF(simvd,2," Output file paths and names:\n"); }
 	else
-		SCMDPRINTF(2," No output files\n");
+		SCMDPRINTF(simvd,2," No output files\n");
 	for(fid=0;fid<cmds->nfile;fid++) {
 		if(!strcmp(cmds->fname[fid],"stdout") || !strcmp(cmds->fname[fid],"stderr"))
-			SCMDPRINTF(2,"  %s (file open): %s\n",cmds->fname[fid],cmds->fname[fid]);
+			SCMDPRINTF(simvd,2,"  %s (file open): %s\n",cmds->fname[fid],cmds->fname[fid]);
 		else {
 			scmdcatfname(cmds,fid,string);
-			SCMDPRINTF(2,"  %s (file %s): %s\n",cmds->fname[fid],cmds->fptr[fid]?"open":"closed",string); }}
+			SCMDPRINTF(simvd,2,"  %s (file %s): %s\n",cmds->fname[fid],cmds->fptr[fid]?"open":"closed",string); }}
 	if(cmds->ndata) {
-		SCMDPRINTF(2," Output data table names:\n"); }
+		SCMDPRINTF(simvd,2," Output data table names:\n"); }
 	else
-		SCMDPRINTF(2," No output data tables\n");
+		SCMDPRINTF(simvd,2," No output data tables\n");
 	for(did=0;did<cmds->ndata;did++)
-		SCMDPRINTF(2,"  %s\n",cmds->dname[did]);
+		SCMDPRINTF(simvd,2,"  %s\n",cmds->dname[did]);
 
+	if(!cmds->cmdlist || cmds->ncmdlist==0)
+		SCMDPRINTF(simvd,2," No commands\n");
+	else {
+		SCMDPRINTF(simvd,2," Commands:\n");
+		for(i=0;i<cmds->ncmdlist;i++) {
+			cmd=cmds->cmdlist[i];
+			timing=cmd->timing;
+			SCMDPRINTF(simvd,2,"  %c",timing);
+			if(strchr("baBAEe",timing));
+			else if(strchr("@",timing))
+				SCMDPRINTF(simvd,2," time: %g",cmd->on);
+			else if(strchr("&",timing))
+				SCMDPRINTF(simvd,2," iteration: %i",cmd->oni);
+			else if(strchr("Nn",timing))
+				SCMDPRINTF(simvd,2," every: %i",cmd->dti);
+			else if(strchr("i",timing))
+				SCMDPRINTF(simvd,2," from: %g to: %g step: %g",cmd->on,cmd->off,cmd->dt);
+			else if(strchr("Ij",timing))
+				SCMDPRINTF(simvd,2," from: %i to: %i step: %i",cmd->oni,cmd->offi,cmd->dti);
+			else if(strchr("x",timing))
+				SCMDPRINTF(simvd,2," from: %g to: %g step: %g mult: %g",cmd->on,cmd->off,cmd->dt,cmd->xt);
+			SCMDPRINTF(simvd,2," '%s' (%s)\n",cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }}
 
 	cmdq=cmds->cmd;
 	if(cmdq) {
-		SCMDPRINTF(2," Time queue:\n");
-		SCMDPRINTF(2,"  %i queue spaces used of %i total\n",q_length(cmdq),q_maxlength(cmdq)-1);
-		SCMDPRINTF(2,"  Times to start, stop, and step, strings, and command type:\n");
+		SCMDPRINTF(simvd,1," Time queue:\n");
+		SCMDPRINTF(simvd,1,"  %i queue spaces used of %i total\n",q_length(cmdq),q_maxlength(cmdq)-1);
+		SCMDPRINTF(simvd,1,"  Times to start, stop, and step, strings, and command type:\n");
 		i=-1;
 		while((i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmdq))>=0) {
 			cmd=(cmdptr)voidptr;
-			SCMDPRINTF(2,"  %g %g%s%g '%s' (%s)\n",cmd->on,cmd->off,cmd->xt>1?" *":" ",cmd->xt>1?cmd->xt:cmd->dt,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }}
+			SCMDPRINTF(simvd,1,"  %g %g%s%g '%s' (%s)\n",cmd->on,cmd->off,cmd->xt>1?" *":" ",cmd->xt>1?cmd->xt:cmd->dt,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }}
 	cmdq=cmds->cmdi;
 	if(cmdq) {
-		SCMDPRINTF(2," Integer queue:\n");
-		SCMDPRINTF(2,"  %i queue spaces used of %i total\n",q_length(cmdq),q_maxlength(cmdq)-1);
-		SCMDPRINTF(2,"  Iterations to start, stop, and step, strings, and command type:\n");
+		SCMDPRINTF(simvd,1," Integer queue:\n");
+		SCMDPRINTF(simvd,1,"  %i queue spaces used of %i total\n",q_length(cmdq),q_maxlength(cmdq)-1);
+		SCMDPRINTF(simvd,1,"  Iterations to start, stop, and step, strings, and command type:\n");
 		i=-1;
 		while((i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmdq))>=0) {
 			cmd=(cmdptr)voidptr;
 			if(cmd->offi!=Q_LLONG_MAX) {
 				snprintf(string2,STRCHAR,"  %s %s %s '%%s' (%%s)\n",Q_LLI,Q_LLI,Q_LLI);
-				SCMDPRINTF(2,string2,cmd->oni,cmd->offi,cmd->dti,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }
+				SCMDPRINTF(simvd,1,string2,cmd->oni,cmd->offi,cmd->dti,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }
 			else {
 				snprintf(string2,STRCHAR,"  %s end %s '%%s' (%%s)\n",Q_LLI,Q_LLI);
-				SCMDPRINTF(2,string2,cmd->oni,cmd->dti,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }}}
-	SCMDPRINTF(2,"\n");
+				SCMDPRINTF(simvd,1,string2,cmd->oni,cmd->dti,cmd->str,scmdcode2string(scmdcmdtype(cmds,cmd),string)); }}}
+
+	SCMDPRINTF(simvd,2,"\n");
 	return; }
 
 
@@ -534,8 +612,7 @@ void scmdoutput(cmdssptr cmds) {
 void scmdwritecommands(cmdssptr cmds,FILE *fptr,char *filename) {
 	int i,fid,did;
 	cmdptr cmd;
-	void *voidptr;
-	char string2[STRCHAR];
+	char timing;
 
 	if(!fptr) return;
 	fprintf(fptr,"# Command parameters\n");
@@ -558,17 +635,21 @@ void scmdwritecommands(cmdssptr cmds,FILE *fptr,char *filename) {
 			fprintf(fptr," %s",cmds->dname[did]);
 		fprintf(fptr,"\n"); }
 
-	i=-1;
-	if(cmds->cmdi)
-		while((i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmds->cmdi))>=0) {
-			cmd=(cmdptr)voidptr;
-			snprintf(string2,STRCHAR,"cmd I %s %s %s %%s\n",Q_LLI,Q_LLI,Q_LLI);
-			fprintf(fptr,string2,cmd->oni,cmd->offi,cmd->dti,cmd->str); }
-	if(cmds->cmd)
-		while((i=q_next(i,NULL,NULL,NULL,NULL,&voidptr,cmds->cmd))>=0) {
-			cmd=(cmdptr)voidptr;
-			if(cmd->xt<=1) fprintf(fptr,"cmd i %g %g %g %s\n",cmd->on,cmd->off,cmd->dt,cmd->str);
-			else fprintf(fptr,"cmd x %g %g %g %g %s\n",cmd->on,cmd->off,cmd->dt,cmd->xt,cmd->str); }
+	for(i=0;i<cmds->ncmdlist;i++) {
+		cmd=cmds->cmdlist[i];
+		timing=cmd->timing;
+		fprintf(fptr,"cmd %c",timing);
+		if(strchr("baBAEe",timing));
+		else if(strchr("@&",timing))
+			fprintf(fptr," %g",cmd->on);
+		else if(strchr("Nn",timing))
+			fprintf(fptr," %g",cmd->dt);
+		else if(strchr("iIj",timing))
+			fprintf(fptr," %g %g %g",cmd->on,cmd->off,cmd->dt);
+		else if(strchr("x",timing))
+			fprintf(fptr," %g %g %g %g",cmd->on,cmd->off,cmd->dt,cmd->xt);
+		fprintf(fptr," %s\n",cmd->str); }
+
 	fprintf(fptr,"\n");
 	return; }
 
@@ -639,6 +720,8 @@ int scmdsetdnames(cmdssptr cmds,char *str) {
 		did=cmds->ndata;
 		itct=sscanf(str,"%s",cmds->dname[did]);
 		if(itct!=1) return 2;
+		if(cmds->data[did])
+			ListClearDD(cmds->data[did]);
 		cmds->ndata++;
 		str=strnword(str,2); }
 
@@ -658,8 +741,8 @@ void scmdappenddata(cmdssptr cmds,int dataid,int newrow, int narg, ...) {
 	return; }
 
 
-/************** file functions **************/	
-	
+/************** file functions **************/
+
 /* scmdsetfroot */
 int scmdsetfroot(cmdssptr cmds,const char *root) {
 	if(!cmds || !root) return 1;
@@ -696,7 +779,7 @@ int scmdsetfnames(cmdssptr cmds,char *str,int append) {
 			newfsuffix[fid]=cmds->fsuffix[fid];
 		for(;fid<newmaxfile;fid++)
 			newfsuffix[fid]=0;
-		
+
 		newfappend=(int*)calloc(newmaxfile,sizeof(int));
 		if(!newfappend) return 1;
 		for(fid=0;fid<cmds->maxfile;fid++)
@@ -710,7 +793,7 @@ int scmdsetfnames(cmdssptr cmds,char *str,int append) {
 			newfptr[fid]=cmds->fptr[fid];
 		for(;fid<newmaxfile;fid++)
 			newfptr[fid]=NULL;
-		
+
 		cmds->maxfile=newmaxfile;
 		free(cmds->fname);
 		cmds->fname=newfname;
@@ -774,13 +857,13 @@ int scmdopenfiles(cmdssptr cmds,int overwrite) {
 					char str2[STRCHAR];
 					fprintf(stderr,"Overwrite existing output file '%s' (y/n)? ",cmds->fname[fid]);
 					scanf("%s",str2);
-					if(!(str2[0]=='y' || str2[0]=='Y')) return 1; 
+					if(!(str2[0]=='y' || str2[0]=='Y')) return 1;
 #endif
 					}}
 			if(cmds->fappend[fid]) cmds->fptr[fid]=fopen(str1,"a");
 			else cmds->fptr[fid]=fopen(str1,"w");
 			if(!cmds->fptr[fid]) {
-				SCMDPRINTF(7,"Failed to open file '%s' for writing\n",cmds->fname[fid]);
+				SCMDPRINTF(cmds->simvd,7,"Failed to open file '%s' for writing\n",cmds->fname[fid]);
 				return 1; }}}
 
 	return 0; }
@@ -835,12 +918,14 @@ int scmdgetfptr(cmdssptr cmds,char *line2,int outstyle,FILE **fptrptr,int *datai
 
 	if(fptrptr) *fptrptr=NULL;
 	if(dataidptr) *dataidptr=-1;
-	if(outstyle==0 || !line2) return 0;
+	if(outstyle==0) return 0;
 
 	fid=did=-1;
-	itct=sscanf(line2,"%s",name);
-	if(itct!=1) return 0;
-	if(fptrptr && !strcmp(name,"stdout")) *fptrptr=stdout;
+	itct=0;
+	if(line2)
+		itct=sscanf(line2,"%s",name);
+	if(itct!=1) *fptrptr=stdout;
+	else if(fptrptr && !strcmp(name,"stdout")) *fptrptr=stdout;
 	else if(fptrptr && !strcmp(name,"stderr")) *fptrptr=stderr;
 	else {
 		if(fptrptr) fid=stringfind(cmds->fname,cmds->nfile,name);
@@ -890,7 +975,7 @@ int scmdfprintf(cmdssptr cmds,FILE *fptr,const char *format,...) {
 	va_start(arguments,format);
 	vsnprintf(message,STRCHARLONG,newformat,arguments);
 	va_end(arguments);
-	code=fprintf(fptr,"%s",message);	
+	code=fprintf(fptr,"%s",message);
 	return code; }
 
 

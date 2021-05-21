@@ -8,16 +8,6 @@
 #ifndef __libsmoldyn_h__
 #define __libsmoldyn_h__
 
-/* The following Swig directives are only read by the swig program */
-#ifdef SWIG
-%module libsmoldyn
-%{
-#define SWIG_FILE_WITH_INIT
-#include "libsmoldyn.h"
-%}
-#endif
-
-
 #include "smoldyn.h"
 
 enum ErrorCode {
@@ -47,7 +37,7 @@ double         smolGetVersion(void);
 
 void           smolSetLogging(FILE *logfile,void (*logFunction)(simptr,int,const char*,...));
 void           smolSetThrowing(int corethreshold,int libthreshold);
-void           smolSetError(const char *errorfunction,enum ErrorCode errorcode,const char *errorstring);
+void           smolSetError(const char *errorfunction,enum ErrorCode errorcode,const char *errorstring,const char *flags);
 void           smolSetErrorNT(const char *errorfunction,enum ErrorCode errorcode,const char *errorstring);
 enum ErrorCode smolGetError(char *errorfunction,char *errorstring,int clearerror);
 void           smolClearError(void);
@@ -72,6 +62,7 @@ enum ErrorCode smolReadConfigString(simptr sim,const char *statement,char *param
 
 /***************************** Simulation settings ****************************/
 
+enum ErrorCode smolSetSimFlags(simptr sim,const char *flags);
 enum ErrorCode smolSetSimTimes(simptr sim,double timestart,double timestop,double timestep);
 enum ErrorCode smolSetTimeStart(simptr sim,double timestart);
 enum ErrorCode smolSetTimeStop(simptr sim,double timestop);
@@ -101,13 +92,14 @@ enum ErrorCode smolOpenOutputFiles(simptr sim, int overwrite);
 enum ErrorCode smolAddCommand(simptr sim,char type,double on,double off,double step,double multiplier,const char *commandstring);
 enum ErrorCode smolAddCommandFromString(simptr sim,char *string);
 enum ErrorCode smolGetOutputData(simptr sim,char *dataname,int *nrow,int *ncol,double **array,int erase);
+enum ErrorCode smolRunCommand(simptr sim,const char *commandstring);
 
 /********************************* Molecules **********************************/
 
 enum ErrorCode smolAddSpecies(simptr sim,const char *species,const char *mollist);
 int            smolGetSpeciesIndex(simptr sim,const char *species);
 int            smolGetSpeciesIndexNT(simptr sim,const char *species);
-char*          smolGetSpeciesName(simptr sim,int speciesindex,char *species);
+void          smolGetSpeciesName(simptr sim,int speciesindex,char *species);
 enum ErrorCode smolSetSpeciesMobility(simptr sim,const char *species,enum MolecState state,double difc,double *drift,double *difmatrix);
 enum ErrorCode smolSetMoleculeColor(simptr sim, const char *species, enum MolecState state, double *color);
 enum ErrorCode smolSetMoleculeSize(simptr sim, const char *species, enum MolecState state, double size);
@@ -189,6 +181,6 @@ enum ErrorCode smolAddLatticeReaction(simptr sim,const char *lattice,const char 
 #ifdef __cplusplus
 }
 #endif
-		
+
 
 #endif

@@ -29,10 +29,12 @@ using namespace std;
 class Command
 {
   public:
-    Command(const simptr sim, const string &cmd);
+    Command(const simptr sim, const string& cmd);
 
-    Command(const simptr sim, const string &cmd, const char cmd_type,
-            const map<string, double> &options);
+    Command(const simptr sim,
+            const string& cmd,
+            const char cmd_type,
+            const map<string, double>& options);
 
     ~Command();
 
@@ -44,6 +46,7 @@ class Command
   private:
     const simptr sim_;
     const string cmd_;
+    bool from_string_;
 
     char cmd_type_;
     map<string, double> options_;
@@ -52,7 +55,6 @@ class Command
     double off_;
     double step_;
     size_t multiplier_;
-    bool from_string_;
     bool added_;
 };
 

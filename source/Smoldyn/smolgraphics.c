@@ -14,6 +14,7 @@
 #include "opengl2.h"
 #include "Rn.h"
 #include "string2.h"
+#include "../libSteve/SimCommand.h"
 
 #ifdef OPTION_NSV
   #include "nsvc.h"
@@ -1376,6 +1377,9 @@ void TimerFunction(int state) {
 		graphss->currentit++; }
 	else if(state>0 || (state==0 && gl2State(-1)==2)) {			// stop the simulation
 		if(oldstate==0) sim->elapsedtime+=difftime(time(NULL),sim->clockstt);
+		scmdpop(sim->cmds,sim->tmax);
+		scmdexecute(sim->cmds,sim->time,sim->dt,-1,1);
+		scmdsetcondition(sim->cmds,0,0);
 		endsimulate(sim,state);
 		if(sim->quitatend) gl2SetKeyPush('Q');	//??
 		state=-1; }
