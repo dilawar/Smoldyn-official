@@ -35,7 +35,7 @@ class BinaryDistribution(setuptools.Distribution):
 
 readme = ""
 with open(Path("@CMAKE_SOURCE_DIR@") / "README.md") as f:
-    readme = f.read().partition('##')[0]
+    readme = f.read().partition("##")[0]
 
 setuptools.setup(
     name="smoldyn",
@@ -58,14 +58,7 @@ setuptools.setup(
     # },
     install_requires=["dataclasses;python_version=='3.6'"],
     extras_require={
-        "dev": [
-            "coverage",
-            "pytest",
-            "mypy",
-            "numpy",
-            "matplotlib",
-            "pytest-cov",
-        ],
+        "dev": ["mypy", "pyflakes", "black", "numpy", "matplotlib"],
         "biosimulators": [
             "biosimulators-utils[logging]>=0.1.73",
             "numpy",
