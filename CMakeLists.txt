@@ -5,11 +5,15 @@
 # Please report bugs and problems to support@smoldyn.org.
 
 ########## Basic setup ##########
-cmake_minimum_required(VERSION 3.12)   # due to better Python support
+cmake_minimum_required(VERSION 3.14)
 
 project(smoldyn LANGUAGES CXX C)
 
-# CI/CD can also set this variable. If not, use the default one.
+# Custom scripts to find some modules such as VTK.
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
+# CI/CD can also set version string. If not, set using git tags or current
+# date.
 if(NOT SMOLDYN_VERSION)
     find_package(Git QUIET)
     if(GIT_FOUND)
@@ -152,6 +156,67 @@ conan_cmake_install(PATH_OR_REFERENCE .
     REMOTE conan-center
     SETTINGS ${settings})
 
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
+
+# macro to check if a flag exists and enable for compiler.
+function(CheckCompilerFlagAndAdd)
+    check_c_compiler_flag(${ARGV0} C_FLAG_EXISTS)
+    check_cxx_compiler_flag(${ARGV0} CXX_FLAG_EXISTS)
+    if(C_FLAG_EXISTS OR CXX_FLAG_EXISTS)
+        if(${ARGV1})
+            add_definitions(${ARGV0}=${ARGV1})
+        else()
+            add_definitions(${ARGV0})
+        endif()
+        message(STATUS "[COMPILER] Adding ${ARGV0}")
+    else()
+        message(STATUS "Compiler does not support ${ARGV0}. Ignoring..")
+    endif()
+endfunction()
+
+if(MSVC)
+    # FIXME: On Windows, when using MSVC, reduce the amount of warnings. MSVC
+    # generates a lot of warning about casting which pollute the build log and
+    # makes it hard to find the error.
+    add_compile_options(/W1)
+else()
+    # enable all warnings.
+    add_compile_options(-Wall -Wextra)
+    CheckCompilerFlagAndAdd(-Wno-unused-parameter)
+endif()
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Choose the buid type: None, Debug, Release, RelWithDebInfo, or MinSizeRel" FORCE)
+endif ()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+if(OPTION_STRICT_BUILD)
+    add_definitions(-Wextra -Werror)
+    CheckCompilerFlagAndAdd(-Wno-format-truncation)
+    CheckCompilerFlagAndAdd(-Wno-uninitialized)
+    CheckCompilerFlagAndAdd(-Wno-unused-parameter)
+    CheckCompilerFlagAndAdd(-Wno-unused-but-set-parameter)
+endif()
+
+# We need a c++14 support to build python bindings.
+if(OPTION_PYTHON)
+    set(CMAKE_CXX_STANDARD 14)
+    try_compile(COMPILER_SUPPORT_C14
+        ${CMAKE_BINARY_DIR}/_test_compiler
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_compiler.cpp
+        OUTPUT_VARIABLE COMPILER_TEST_OUTPUT
+        )
+    if(NOT COMPILER_SUPPORT_C14)
+        message(STATUS "Failed to build test program: ${COMPILER_TEST_OUTPUT}")
+        message(FATAL_ERROR "Your compiler does not support C++14. "
+            "Please use a C++14 compliant compiler. "
+            "See https://en.cppreference.com/w/cpp/compiler_support/14 "
+            "for C++14 support among C++ compilers.")
+    endif()
+endif()
+
 ######### Core code information ###########
 
 #
@@ -202,49 +267,12 @@ if(OPTION_USE_LIBTIFF AND NOT OPTION_USE_OPENGL)
     set(OPTION_USE_LIBTIFF OFF)
 endif()
 
-
-####### Compiler flags ######################
-
-include(CheckCCompilerFlag)
-include(CheckCXXCompilerFlag)
-
-# macro to check if a flag exists and enable for compiler.
-macro(CheckCompilerFlagAndAdd)
-    check_c_compiler_flag(${ARGV0} FLAG_EXISTS)
-    if(FLAG_EXISTS)
-        if(${ARGV1})
-            add_definitions(${ARGV0}=${ARGV1})
-        else()
-            add_definitions(${ARGV0})
-        endif()
-    else(FLAG_EXISTS)
-        message(STATUS "Compiler does not support ${ARGV0}. Ignoring..")
-    endif(FLAG_EXISTS)
-endmacro()
-
-add_definitions(-Wall)
-
-if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING
-        "Choose the buid type: None, Debug, Release, RelWithDebInfo, or MinSizeRel" FORCE)
-endif ()
-
 if(OPTION_ASAN)
     # Address sanitizer
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
     set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 endif()
 
-
-if(OPTION_STRICT_BUILD)
-    add_definitions(-Wextra -Werror)
-    CheckCompilerFlagAndAdd(-Wno-format-truncation)
-    CheckCompilerFlagAndAdd(-Wno-uninitialized)
-    CheckCompilerFlagAndAdd(-Wno-unused-parameter)
-    CheckCompilerFlagAndAdd(-Wno-unused-but-set-parameter)
-endif()
-
-message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 set(VCELL_BUILD OFF)
 set(APPLE_BUILD OFF)
@@ -462,6 +490,7 @@ add_subdirectory(source/libSteve)
 add_library(smoldyn_static STATIC ${SRC_FILES}
     $<TARGET_OBJECTS:Steve>
     $<TARGET_OBJECTS:nsv>)
+
 set_property(TARGET smoldyn_static PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(smoldyn_static PUBLIC ${DEP_LIBS})
 set_target_properties(smoldyn_static PROPERTIES PREFIX "lib")
