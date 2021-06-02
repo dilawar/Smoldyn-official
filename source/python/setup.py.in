@@ -61,6 +61,9 @@ setuptools.setup(
         "dev": [
             "coverage",
             "pytest",
+            "mypy",
+            "numpy",
+            "matplotlib",
             "pytest-cov",
         ],
         "biosimulators": [
