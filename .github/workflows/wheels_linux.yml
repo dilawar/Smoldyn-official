@@ -62,7 +62,7 @@ jobs:
             VERSION=$(echo $WHEEL_PATH | cut -d - -f 2- | cut -d . -f 1-2)
           fi
 
-          if [ ! -z ${SECRETS_ARE_AVAILABLE+x} ]; then
+          if [ ! -z "${SECRETS_ARE_AVAILABLE+x}" ]; then
               docker login ghcr.io \
                 --username ${{ secrets.BIOSIMULATORS_GH_USERNAME }} \
                 --password ${{ secrets.BIOSIMULATORS_GH_TOKEN }}
@@ -86,7 +86,7 @@ jobs:
             VERSION=$(echo $WHEEL_PATH | cut -d - -f 2- | cut -d . -f 1-2)
           fi
           REVISION=$(git rev-parse HEAD)
-          if [ ! -z ${SECRETS_ARE_AVAILABLE+x} ]; then
+          if [ ! -z "${SECRETS_ARE_AVAILABLE+x}" ]; then
               curl \
                 -X POST \
                 -u ${{ secrets.BIOSIMULATORS_GH_USERNAME }}:${{ secrets.BIOSIMULATORS_GH_TOKEN }} \
