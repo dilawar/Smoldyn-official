@@ -5,7 +5,6 @@
 # find_package(pybind11 CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-conan_cmake_run(REQUIRES pybind11/2.6.1 BASIC_SETUP CMAKE_TARGETS)
 find_package(pybind11 REQUIRED)
 
 # recompile libsmoldyn for PYTHON module.
@@ -28,7 +27,7 @@ target_include_directories(_pysmoldyn PRIVATE ${Python3_INCLUDE_DIRS} ${PYBIND11
 # This is suggested by pybind11: reduces binary size and disables some warnings.
 set_target_properties(_pysmoldyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(_pysmoldyn PRIVATE ${DEP_LIBS})
-target_link_libraries(_pysmoldyn PRIVATE CONAN_PKG::pybind11)
+target_link_libraries(_pysmoldyn PRIVATE pybind11::pybind11)
 
 # FIXME: FOllowing runs on github actions and other CI (for Windows only).
 # Its very hard to locate correct version of Python on every cloud based CI.
@@ -47,7 +46,7 @@ pybind11_add_module(_smoldyn MODULE
     Simulation.cpp
     module.cpp)
 
-target_link_libraries(_smoldyn PRIVATE _pysmoldyn CONAN_PKG::pybind11)
+target_link_libraries(_smoldyn PRIVATE _pysmoldyn pybind11::pybind11)
 
 # If generator pattern is not used here, cmake produces module in Release/Debug folders
 # which will break the wheels.

@@ -143,6 +143,10 @@ if(OPTION_USE_ICONV)
     list(APPEND CONAN_LIBS libiconv/1.16)
 endif(OPTION_USE_ICONV)
 
+if(OPTION_PYTHON)
+    list(APPEND CONAN_LIBS pybind11/2.6.1)
+endif(OPTION_PYTHON)
+
 #
 # Install using conan
 #
