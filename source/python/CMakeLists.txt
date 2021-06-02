@@ -5,7 +5,7 @@
 # find_package(pybind11 CONFIG REQUIRED)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-conan_cmake_run(REQUIRES pybind11/2.6.2 BASIC_SETUP CMAKE_TARGETS)
+conan_cmake_run(REQUIRES pybind11/2.6.1 BASIC_SETUP CMAKE_TARGETS)
 find_package(pybind11 REQUIRED)
 
 # recompile libsmoldyn for PYTHON module.
