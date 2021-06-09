@@ -65,4 +65,9 @@ void gl2PlotPtsD(double **data, int *ser, int nser, int npts, double **color,
 void gl2PlotSurf(float *xdata, float *ydata, float **zdata, int nx, int ny,
                  int nz, char *style);
 
+#ifdef __cplusplus
+}
+#endif
+
+
 #endif

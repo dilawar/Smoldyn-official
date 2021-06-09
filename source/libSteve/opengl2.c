@@ -1808,4 +1808,3 @@ void gl2PlotSurf(float *xdata, float *ydata, float **zdata, int nx, int ny,
 #endif
     return;
 }
-

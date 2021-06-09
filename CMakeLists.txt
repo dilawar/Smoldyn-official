@@ -2,38 +2,39 @@
 # Written by Steve Andrews, April 16, 2012. Updated by Steve Andrews since then.
 # This file, and other files of the Smoldyn project, are licensed with LGPL license.
 # The primary Smoldyn web site is http://www.smoldyn.org.
-# Please report bugs and problems to support@smoldyn.org. 
+# Please report bugs and problems to support@smoldyn.org.
 
 ########## Basic setup ##########
-cmake_minimum_required(VERSION 3.12)   # due to better Python support 
+cmake_minimum_required(VERSION 3.14)
 
 project(smoldyn LANGUAGES CXX C)
 
-# CI/CD can also set this variable. If not, use the default one.
+# Custom scripts to find some modules such as VTK.
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
+# CI/CD can also set version string. If not, set using git tags or current
+# date.
 if(NOT SMOLDYN_VERSION)
     find_package(Git QUIET)
     if(GIT_FOUND)
         # Is the current commit tagged? If yes, this command will return the
-        # tag else it returns empty. If a valid tag is found, then use it for a
-        # release.
+        # tag else it returns empty. When a tag is found, it is a release.
         execute_process(COMMAND ${GIT_EXECUTABLE} tag --points-at HEAD
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            OUTPUT_VARIABLE SMOLDYN_TAG	
+            OUTPUT_VARIABLE SMOLDYN_TAG
             OUTPUT_STRIP_TRAILING_WHITESPACE)
         if(SMOLDYN_TAG)
             # drop v from the tag to get the version info.
             string(SUBSTRING ${SMOLDYN_TAG} 1 -1 SMOLDYN_VERSION)
             message(STATUS " -- Found a release tag ${SMOLDYN_TAG}")
         else()
-            # nightly release / upcoming release preview. 
-            # NOTE: Change is appropriately after a release. Can't find a good
-            # way to automate this process.
+            # nightly release.
             string(TIMESTAMP STAMP "%Y%m%d")
-            set(SMOLDYN_VERSION "2.65.dev${STAMP}")
+            set(SMOLDYN_VERSION "2.66.dev${STAMP}")
         endif()
     endif()
 endif()
-message(STATUS "Smoldyn version set to: '${SMOLDYN_VERSION}'")
+message(STATUS "Smoldyn version is set to: '${SMOLDYN_VERSION}'")
 
 # Default build type.
 if(NOT CMAKE_BUILD_TYPE)
@@ -61,23 +62,23 @@ option(OPTION_VTK "Compile Smoldyn with VTK functionality" OFF)
 option(OPTION_STATIC "Compile Smoldyn with static libraries" OFF)
 option(OPTION_USE_OPENGL "Build with OpenGL support" ON)
 option(OPTION_USE_LIBTIFF "Build with LibTiff support" ON)
-option(OPTION_USE_ICONV "Build with Libiconv support" OFF)
 option(OPTION_USE_ZLIB "Build with Zlib support" OFF)
 option(OPTION_PYTHON  "Build Python module" ON)
 option(OPTION_EXAMPLES "Run Libsmoldyn tests" OFF)
-option(OPTION_STRICT_BUILD "Treat most warnings as error and enable ASAN" OFF)
 option(OPTION_DOCS "Generate documentation" OFF)
+
+
+#
+# Developer options. Enables Address Sanitizer to detects memory leak etc. Most
+# memory leaks are in GL interface.
+#
+option(OPTION_STRICT_BUILD "Treat most warnings as error." OFF)
+option(OPTION_ASAN "Enable Address Sanitizer" OFF)
 
 if (OPTION_VCELL)
     set(OPTION_USE_LIBTIFF OFF)
     set(OPTION_USE_ZLIB OFF)
     set(HAVE_ZLIB TRUE)
-    set(OPTION_USE_ICONV OFF)
-    set(HAVE_ICONV FALSE)
-endif ()
-
-if (OPTION_STATIC)
-#    set(OPTION_USE_ZLIB ON)
 endif ()
 
 if (OPTION_PYTHON)
@@ -104,7 +105,7 @@ message(STATUS "Option to build documentation: ${OPTION_DOCS}")
 
 
 #
-# conan package manager. 
+# conan package manager.
 #
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_program(CONAN conan HINTS $ENV{HOME}/.local/bin)
@@ -127,8 +128,8 @@ endif(OPTION_NSV)
 
 if(OPTION_USE_LIBTIFF)
     list(APPEND CONAN_LIBS libtiff/4.2.0)
-    list(APPEND CONAN_OPTIONS libtiff:zstd=False 
-        libtiff:jbig=False 
+    list(APPEND CONAN_OPTIONS libtiff:zstd=False
+        libtiff:jbig=False
         libtiff:webp=False
         libtiff:jpeg=False
         libtiff:libdeflate=False)
@@ -145,11 +146,14 @@ endif(OPTION_USE_ICONV)
 if(OPTION_USE_OPENGL)
     list(APPEND CONAN_LIBS glfw/3.3.3)
 endif()
+if(OPTION_PYTHON)
+    list(APPEND CONAN_LIBS pybind11/2.6.1)
+endif(OPTION_PYTHON)
 
 #
 # Install using conan
 #
-conan_cmake_configure(REQUIRES ${CONAN_LIBS} 
+conan_cmake_configure(REQUIRES ${CONAN_LIBS}
     GENERATORS cmake_find_package
     OPTIONS ${CONAN_OPTIONS})
 
@@ -159,50 +163,80 @@ conan_cmake_install(PATH_OR_REFERENCE .
     REMOTE conan-center
     SETTINGS ${settings})
 
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
+
+# macro to check if a flag exists and enable for compiler.
+function(CheckCompilerFlagAndAdd)
+    check_c_compiler_flag(${ARGV0} C_FLAG_EXISTS)
+    check_cxx_compiler_flag(${ARGV0} CXX_FLAG_EXISTS)
+    if(C_FLAG_EXISTS OR CXX_FLAG_EXISTS)
+        if(${ARGV1})
+            add_definitions(${ARGV0}=${ARGV1})
+        else()
+            add_definitions(${ARGV0})
+        endif()
+        message(STATUS "[COMPILER] Adding ${ARGV0}")
+    else()
+        message(STATUS "Compiler does not support ${ARGV0}. Ignoring..")
+    endif()
+endfunction()
+
+if(MSVC)
+    # FIXME: On Windows, when using MSVC, reduce the amount of warnings. MSVC
+    # generates a lot of warning about casting which pollute the build log and
+    # makes it hard to find the error.
+    add_compile_options(/W1)
+else()
+    # enable all warnings.
+    add_compile_options(-Wall -Wextra)
+    CheckCompilerFlagAndAdd(-Wno-unused-parameter)
+endif()
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Choose the buid type: None, Debug, Release, RelWithDebInfo, or MinSizeRel" FORCE)
+endif ()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+if(OPTION_STRICT_BUILD)
+    add_definitions(-Wextra -Werror)
+    CheckCompilerFlagAndAdd(-Wno-format-truncation)
+    CheckCompilerFlagAndAdd(-Wno-uninitialized)
+    CheckCompilerFlagAndAdd(-Wno-unused-parameter)
+    CheckCompilerFlagAndAdd(-Wno-unused-but-set-parameter)
+endif()
+
+# We need a c++14 support to build python bindings.
+if(OPTION_PYTHON)
+    set(CMAKE_CXX_STANDARD 14)
+    try_compile(COMPILER_SUPPORT_C14
+        ${CMAKE_BINARY_DIR}/_test_compiler
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_compiler.cpp
+        OUTPUT_VARIABLE COMPILER_TEST_OUTPUT
+        )
+    if(NOT COMPILER_SUPPORT_C14)
+        message(STATUS "Failed to build test program: ${COMPILER_TEST_OUTPUT}")
+        message(FATAL_ERROR "Your compiler does not support C++14. "
+            "Please use a C++14 compliant compiler. "
+            "See https://en.cppreference.com/w/cpp/compiler_support/14 "
+            "for C++14 support among C++ compilers.")
+    endif()
+endif()
+
 ######### Core code information ###########
 
-set(HEADER_FILES
-	${CMAKE_SOURCE_DIR}/source/libSteve/Geometry.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/List.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/math2.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/opengl2.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/parse.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/queue.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/random2.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/Rn.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/RnSort.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/rxnparam.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/SimCommand.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/Sphere.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/string2.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/SurfaceParam.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/Zn.h
-	${CMAKE_SOURCE_DIR}/source/libSteve/SFMT/SFMT.h
-	${CMAKE_SOURCE_DIR}/source/Smoldyn/smoldyn.h
-	${CMAKE_SOURCE_DIR}/source/Smoldyn/smoldynfuncs.h
-	${CMAKE_SOURCE_DIR}/source/vcell/SimpleMesh.h
-	${CMAKE_SOURCE_DIR}/source/vcell/SimpleValueProvider.h
-	${CMAKE_SOURCE_DIR}/source/NextSubVolume/nsvc.h
-	${CMAKE_SOURCE_DIR}/source/vtk/vtkwrapper.h
-	)
-
+#
+# Source files for main target smoldyn and libsmodyn. Also these sources are
+# recompiled for python module _smoldyn.*.so with a slightly different set of
+# flags. Hence, a list. This list is used in source/python/CMakeLists.txt file
+# as well.
+#
+# TODO: May be a good idea to create libSmoldyn and link it statically to the
+# python module and smoldyn binary. This way we don't have to compile it
+# twice.
+#
 set(SRC_FILES
-	${CMAKE_SOURCE_DIR}/source/libSteve/Geometry.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/List.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/math2.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/opengl2.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/parse.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/queue.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/random2.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/Rn.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/RnSort.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/rxnparam.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/SimCommand.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/Sphere.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/string2.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/SurfaceParam.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/Zn.c
-	${CMAKE_SOURCE_DIR}/source/libSteve/SFMT/SFMT.c
 	${CMAKE_SOURCE_DIR}/source/Smoldyn/smolbng.c
 	${CMAKE_SOURCE_DIR}/source/Smoldyn/smolboxes.c
 	${CMAKE_SOURCE_DIR}/source/Smoldyn/smolcmd.c
@@ -225,14 +259,13 @@ include_directories(source/libSteve source/Smoldyn ${CMAKE_BINARY_DIR})
 
 if(OPTION_VCELL)
     list(APPEND SRC_FILES
-        source/Smoldyn/smoldynhybrid.c
-        source/vcell/SimpleMesh.cpp
-        source/vcell/SimpleValueProvider.cpp )
+        ${CMAKE_SOURCE_DIR}/source/Smoldyn/smoldynhybrid.c
+        ${CMAKE_SOURCE_DIR}/source/vcell/SimpleMesh.cpp
+        ${CMAKE_SOURCE_DIR}/source/vcell/SimpleValueProvider.cpp )
     include_directories(source/vcell)
 endif(OPTION_VCELL)
 
 if(OPTION_TARGET_LIBSMOLDYN)
-    list(APPEND HEADER_FILES ${CMAKE_SOURCE_DIR}/source/Smoldyn/libsmoldyn.h)
     list(APPEND SRC_FILES ${CMAKE_SOURCE_DIR}/source/Smoldyn/libsmoldyn.cpp)
 endif(OPTION_TARGET_LIBSMOLDYN)
 
@@ -241,29 +274,12 @@ if(OPTION_USE_LIBTIFF AND NOT OPTION_USE_OPENGL)
     set(OPTION_USE_LIBTIFF OFF)
 endif()
 
-set_source_files_properties(${SRC_FILES} PROPERTIES LANGUAGE CXX )
-set_source_files_properties(${MAIN_FILES} PROPERTIES LANGUAGE CXX )
-
-
-####### Compiler flags ######################
-
-if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING
-        "Choose the buid type: None, Debug, Release, RelWithDebInfo, or MinSizeRel" FORCE)
-endif ()
-
-if(OPTION_STRICT_BUILD)
-    add_definitions(-Wall -Werror)
-    # add_definitions(-Wno-format-truncation)
-    # See https://stackoverflow.com/a/14132910/1805129
-    add_definitions(-Wno-uninitialized)
+if(OPTION_ASAN)
     # Address sanitizer
-    set(CMAKE_BUILD_TYPE Debug)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
     set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 endif()
 
-message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 set(VCELL_BUILD OFF)
 set(APPLE_BUILD OFF)
@@ -362,8 +378,6 @@ if(OPTION_USE_ICONV)
 endif(OPTION_USE_ICONV)
 
 
-####### Option: Build with VTK ##########
-
 if(OPTION_VTK)
     add_definitions(-DHAVE_VTK)
     find_package(VTK REQUIRED)
@@ -384,25 +398,38 @@ endif (OPTION_NSV)
 
 
 ####### Targets ##########
+add_subdirectory(source/libSteve)
 
-if (OPTION_TARGET_SMOLDYN)
-    add_executable(smoldyn ${SRC_FILES} ${MAIN_FILES} ${HEADER_FILES})
-    target_link_libraries(smoldyn PRIVATE ${DEP_LIBS})
-endif ()
+# Static library is always built. We link it to all other targets.
+# OPTION_TARGET_LIBSMOLDYN now only control the shared library.
+add_library(smoldyn_static STATIC ${SRC_FILES}
+    $<TARGET_OBJECTS:Steve>
+    $<TARGET_OBJECTS:nsv>)
+
+set_property(TARGET smoldyn_static PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(smoldyn_static PUBLIC ${DEP_LIBS})
+set_target_properties(smoldyn_static PROPERTIES PREFIX "lib")
 
 if (OPTION_TARGET_LIBSMOLDYN)
-    add_library(smoldyn_shared SHARED ${SRC_FILES} ${HEADER_FILES})
-    add_library(smoldyn_static STATIC ${SRC_FILES} ${HEADER_FILES})
-    set_property(TARGET smoldyn_static PROPERTY POSITION_INDEPENDENT_CODE ON)
-    target_link_libraries(smoldyn_shared ${DEP_LIBS})
-    target_link_libraries(smoldyn_static ${DEP_LIBS})
+    add_library(smoldyn_shared SHARED ${SRC_FILES}
+        $<TARGET_OBJECTS:Steve>
+        $<TARGET_OBJECTS:nsv>)
+
+    target_link_libraries(smoldyn_shared PUBLIC ${DEP_LIBS})
+
     if (APPLE_BUILD)
         set_target_properties(smoldyn_shared PROPERTIES LINK_FLAGS "-framework Glut -framework OpenGL")
     elseif (WINDOWS_BUILD)
         set_target_properties(smoldyn_shared PROPERTIES PREFIX "lib")
-        set_target_properties(smoldyn_static PROPERTIES PREFIX "lib")
     endif ()
 endif ()
+
+if (OPTION_TARGET_SMOLDYN)
+    add_executable(smoldyn ${MAIN_FILES})
+    target_link_libraries(smoldyn PUBLIC smoldyn_static)
+    target_link_libraries(smoldyn PUBLIC ${DEP_LIBS})
+endif ()
+
 
 
 ########## Python module #########
@@ -450,4 +477,3 @@ enable_testing()
 if (OPTION_TARGET_LIBSMOLDYN AND OPTION_EXAMPLES)
     add_subdirectory(examples)
 endif ()
-

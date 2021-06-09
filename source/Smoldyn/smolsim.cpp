@@ -199,7 +199,7 @@ char *simsc2string(enum StructCond sc,char *string) {
 /* simversionnumber */
 double simversionnumber(void) {
 	double v;
-	
+
 	v=0;
 	sscanf(VERSION,"%lg",&v);
 	return v; }
@@ -277,6 +277,7 @@ simptr simalloc(const char *fileroot) {
 	simsetvariable(sim,"x",dblnan());
 	simsetvariable(sim,"y",dblnan());
 	simsetvariable(sim,"z",dblnan());
+	simsetvariable(sim,"r",dblnan());
 
 #if ENABLE_PYTHON_CALLBACK
     sim->ncallbacks = 0;
@@ -385,9 +386,10 @@ void simoutput(simptr sim) {
 	if(sim->accur<10) simLog(sim,2," Accuracy level: %g\n",sim->accur);
 	else simLog(sim,1," Accuracy level: %g\n",sim->accur);
 	simLog(sim,2," Random number seed: %li\n",sim->randseed);
-	if(sim->nvar>0)
-		simLog(sim,2," %i variable%s defined:\n",sim->nvar,sim->nvar>1?"s":"");
-	for(v=0;v<sim->nvar;v++)
+	simLog(sim,sim->nvar>5?2:1," %i variable%s defined:\n",sim->nvar,sim->nvar>1?"s":"");
+	for(v=0;v<sim->nvar && v<5;v++)
+		simLog(sim,1,"  %s = %g\n",sim->varnames[v],sim->varvalues[v]);
+	for(;v<sim->nvar;v++)
 		simLog(sim,2,"  %s = %g\n",sim->varnames[v],sim->varvalues[v]);
 
 	simLog(sim,2," Time from %g to %g step %g\n",sim->tmin,sim->tmax,sim->dt);
@@ -412,8 +414,8 @@ void simsystemoutput(simptr sim) {
 	scmdoutput(sim->cmds);
 	boxssoutput(sim);
 	if(vflag)
-		boxoutput(sim->boxs,0,sim->boxs->nbox,sim->dim);
-//		boxoutput(sim->boxs,0,20,sim->dim);
+//		boxoutput(sim->boxs,0,sim->boxs->nbox,sim->dim);
+		boxoutput(sim->boxs,0,10,sim->dim);
 	for(order=0;order<MAXORDER;order++)
 		rxnoutput(sim,order);
 	ruleoutput(sim);
@@ -537,7 +539,8 @@ int simsettime(simptr sim,double time,int code) {
 			sim->dt=time;
 			molsetcondition(sim->mols,SCparams,0);
 			rxnsetcondition(sim,-1,SCparams,0);
-			surfsetcondition(sim->srfss,SCparams,0); }
+			surfsetcondition(sim->srfss,SCparams,0);
+			scmdsetcondition(sim->cmds,1,0); }
 		else er=2; }
 	else if(code==4) sim->tbreak=time;
 	else er=1;
@@ -581,7 +584,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		itct=sscanf(line2,"%s",nm);
 		CHECKS(itct==1,"variable format: name = value");
 		CHECKS(strcmp(nm,"time"),"'time' cannot be used as a variable name; it is pre-defined as the simulation time");
-		CHECKS(strcmp(nm,"x") && strcmp(nm,"y") && strcmp(nm,"z"),"x, y, and z are reserved variable names");
+		CHECKS(strcmp(nm,"x") && strcmp(nm,"y") && strcmp(nm,"z") && strcmp(nm,"r"),"x, y, z, and r are reserved variable names");
 		CHECKS(strokname(nm),"variable name has to start with a letter and then be alphanumeric with optional underscores");
 		line2=strnword(line2,2);
 		CHECKS(line2,"variable format: name = value");
@@ -820,7 +823,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 			line2=strnword(line2,2); }
 		CHECKS(molsetdrift(sim,0,index,ms,v1)==0,"out of memory in drift");
 		CHECKS(!line2,"unexpected text following drift"); }
-	
+
 	else if(!strcmp(word,"drift_rule")) {					// drift_rule
 		er=molstring2pattern(line2,&ms,pattern,0);
 		CHECKS(er!=-1,"drift_rule format: species[(state)] vector");
@@ -1143,7 +1146,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECKS(er!=2,"BUG: missing parameter");
 		CHECKS(er!=3,"background_color values need to be between 0 and 1");
 		CHECKS(!line2,"unexpected text following background_color"); }
-	
+
 	else if(!strcmp(word,"text_color") || !strcmp(word,"text_colour")) {		// text_color
 		er=graphicsreadcolor(&line2,v2);
 		CHECKS(er!=3,"color values need to be between 0 and 1");
@@ -1343,26 +1346,14 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECKS(!strnword(line2,3),"unexpected text following output_file_number"); }
 
 	else if(!strcmp(word,"cmd")) {								// cmd
-		CHECKS((simsettime(sim,0,-1)&14)==14,"need to set simulation times before calling cmd");
-		er=scmdstr2cmd(sim->cmds,line2,sim->tmin,sim->tmax,sim->dt,varnames,varvalues,nvar);
+		er=scmdstr2cmd(sim->cmds,line2,varnames,varvalues,nvar);
 		CHECKS(er!=1,"out of memory in cmd");
 		CHECKS(er!=2,"BUG: no command superstructure for cmd");
 		CHECKS(er!=3,"cmd format: type [on off dt] string");
-		CHECKS(er!=4,"command string is missing");
-		CHECKS(er!=5,"cmd time step needs to be >0");
-		CHECKS(er!=6,"command timing type character not recognized");
-		CHECKS(er!=7,"insertion of command in queue failed");
-		CHECKS(er!=8,"cmd time multiplier needs to be >1"); }
+		CHECKS(er!=6,"command timing type character not recognized"); }
 
 	else if(!strcmp(word,"max_cmd")) {						// max_cmd
-		itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
-		CHECKS(itct==1,"max_cmd needs to be an integer");
-		CHECKS(i1>=0,"max_cmd needs to be >=0");
-		er=scmdqalloc(sim->cmds,i1);
-		CHECKS(er!=1,"insufficient memory");
-		CHECKS(er!=2,"SMOLDYN BUG: scmdqalloc");
-		CHECKS(er!=3,"max_cmd can only be called once");
-		CHECKS(!strnword(line2,2),"unexpected text following max_cmd"); }
+		CHECKS(0,"max_cmd is an obsolete statement. It simply needs to be removed."); }
 
 	// surfaces
 
@@ -1418,18 +1409,18 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECK(cmpt!=NULL); }
 
 	// ports
-	
+
 	else if(!strcmp(word,"max_port")) {						// max_port
 		itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
 		CHECKS(itct==1,"max_port needs to be a number");
 		CHECKS(i1>=0,"max_port must be at least 0");
 		CHECKS(portenableports(sim,i1),"failed to enable ports");
 		CHECKS(!strnword(line2,2),"unexpected text following max_port"); }
-	
+
 	else if(!strcmp(word,"new_port")) {					// new_port
 		port=portreadstring(sim,pfp,NULL,"name",line2);
 		CHECK(port!=NULL); }
-	
+
 	else if(!strcmp(word,"port")) {							// port
 		CHECKS(sim->portss,"individual ports need to be defined before using port");
 		itct=sscanf(line2,"%s %s",nm,nm1);
@@ -1441,20 +1432,20 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		port=sim->portss->portlist[prt];
 		port=portreadstring(sim,pfp,port,nm1,line2);
 		CHECK(port!=NULL); }
-	
+
 	// filaments
-	
+
 	else if(!strcmp(word,"max_filament")) {				// max_filament
 		itct=strmathsscanf(line2,"%mi",varnames,varvalues,nvar,&i1);
 		CHECKS(itct==1,"max_filament needs to be a number");
 		CHECKS(i1>=0,"max_filament must be at least 0");
 		CHECKS(filenablefilaments(sim,i1),"failed to enable filaments");
 		CHECKS(!strnword(line2,2),"unexpected text following max_filament"); }
-	
+
 	else if(!strcmp(word,"new_filament")) {				// new_filament
 		fil=filreadstring(sim,pfp,NULL,"name",line2);
 		CHECK(fil!=NULL); }
-	
+
 	else if(!strcmp(word,"filament")) {						// filament
 		CHECKS(sim->filss,"individual filaments need to be defined before using filament");
 		itct=sscanf(line2,"%s %s",nm,nm1);
@@ -1483,7 +1474,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 			string rawStr, expStr;
 			getline(ss, rawStr);
 			size_t found = rawStr.find(";");
-			
+
 			if(found!=string::npos) {
 				expStr = rawStr.substr(0, found);
 				ValueProvider* valueProvider = sim->valueProviderFactory->createValueProvider(expStr);
@@ -1493,8 +1484,8 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 				} catch (...) {
 					rxn->rateValueProvider = valueProvider;
 				}
-				
-				//if rate is a exp, a "fake" set value has to be set to allow RxnSetRate to do proper job, especially when there 
+
+				//if rate is a exp, a "fake" set value has to be set to allow RxnSetRate to do proper job, especially when there
 				//is reversible reactions, the rxn->rparamt, and rxn->bindrad2 have to be set.
 				er = RxnSetValue(sim, "rate", rxn, constRate);
 				line2=NULL; }
@@ -1529,7 +1520,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECKS(rxn,"unrecognized reaction name");
 		CHECKS(!strnword(line2,3),"unexpected text following reaction_rate"); }
 #endif
-	
+
 	else if(!strcmp(word,"reaction_multiplicity")) {	// reaction_multiplicity
 		itct=strmathsscanf(line2,"%s %mi",varnames,varvalues,nvar,rname,&i1);
 		CHECKS(itct==2,"reaction_multiplicity format: rname multiplicity");
@@ -2047,7 +2038,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECKS(er!=2,"out of memory");
 		CHECKS(er!=3,"epsilon value needs to be at least 0");
 		CHECKS(!strnword(line2,2),"unexpected text following epsilon"); }
-	
+
 	else if(!strcmp(word,"margin")) {						// margin
 		CHECKS(dim>0,"need to enter dim before margin");
 		itct=strmathsscanf(line2,"%mlg",varnames,varvalues,nvar,&flt1);
@@ -2056,7 +2047,7 @@ int simreadstring(simptr sim,ParseFilePtr pfp,const char *word,char *line2) {
 		CHECKS(er!=2,"out of memory");
 		CHECKS(er!=3,"margin value needs to be at least 0");
 		CHECKS(!strnword(line2,2),"unexpected text following margin"); }
-	
+
 	else if(!strcmp(word,"neighbor_dist") || !strcmp(word,"neighbour_dist")) {			// neighbor_dist
 		CHECKS(dim>0,"need to enter dim before neighbor_dist");
 		itct=strmathsscanf(line2,"%mlg",varnames,varvalues,nvar,&flt1);
@@ -2090,6 +2081,7 @@ int loadsim(simptr sim,const char *fileroot,const char *filename,const char *fla
 	strncpy(sim->filepath,fileroot,STRCHAR);
 	strncpy(sim->filename,filename,STRCHAR);
 	strncpy(sim->flags,flags,STRCHAR);
+	strcpy(SimFlags,flags);
 	done=0;
 	pfp=Parse_Start(fileroot,filename,errstring);
 	CHECKS(pfp,"%s",errstring);
@@ -2113,7 +2105,7 @@ int loadsim(simptr sim,const char *fileroot,const char *filename,const char *fla
 
 #ifdef VCELL
 		else if(!strcmp(word,"start_jms")) {			// jms settings
-			er=loadJMS(sim,&pfp,line2, errstring); 
+			er=loadJMS(sim,&pfp,line2, errstring);
 		}
 
 		else if(!strcmp(word,"start_highResVolumeSamples")) {			//highResVolumeSamplesFile
@@ -2133,7 +2125,7 @@ int loadsim(simptr sim,const char *fileroot,const char *filename,const char *fla
 
 		else if(!strcmp(word,"start_port")) {					// start_port
 			er=loadport(sim,&pfp,line2); }
-		
+
 		else if(!strcmp(word,"start_lattice")) {			// start_lattice
 			er=loadlattice(sim,&pfp,line2); }
 
@@ -2144,7 +2136,7 @@ int loadsim(simptr sim,const char *fileroot,const char *filename,const char *fla
 
 		else if(!strcmp(word,"start_filament")) {			// start_filament
 			er=filload(sim,&pfp,line2); }
-		
+
 		else if(!strcmp(word,"start_rules")) {				// start_rules
 			CHECKS(0,"Moleculizer support has been discontinued in Smoldyn"); }
 
@@ -2209,7 +2201,7 @@ int simupdate(simptr sim) {
 		simLog(sim,2," setting up ports\n");
 	er=portsupdate(sim);
 	CHECK(er!=1);
-	
+
 	if(sim->condition==SCinit && sim->latticess)
 		simLog(sim,2," setting up lattices\n");
 	er=latticesupdate(sim);
@@ -2259,6 +2251,10 @@ int simupdate(simptr sim) {
 	er=reassignmolecs(sim,0,0);
 	CHECK(!er);
 
+	if(sim->cmds && sim->cmds->condition!=3) {
+		er=scmdupdatecommands(sim->cmds,sim->tmin,sim->tmax,sim->dt);
+		CHECK(!er); }
+
 	simsetcondition(sim,SCok,1);
 	recurs=0;
 
@@ -2293,12 +2289,12 @@ int simInitAndLoad(const char *fileroot,const char *filename,simptr *smptr,const
 		CHECK(!er);
 		if(sim && sim->valueProviderFactory) {
 			sim->valueProviderFactory->setSimptr(sim); }
-		
+
 		simLog(sim,2," Loaded file successfully\n"); }
 
 	*smptr=sim;
 	return 0;
-	
+
 failure:
 	if(ErrorType!=1) simLog(sim,10,ErrorString);
 	if(!*smptr) simfree(sim);
@@ -2331,7 +2327,7 @@ int simInitAndLoad(const char *fileroot,const char *filename,simptr *smptr,const
 
 	*smptr=sim;
 	return 0;
-	
+
 failure:
 	if(ErrorType!=1) simLog(sim,10,ErrorString);
 	if(!*smptr) simfree(sim);
@@ -2491,8 +2487,6 @@ void endsimulate(simptr sim,int er) {
 	gl2State(2);
 	//qflag=strchr(sim->flags,'q')?1:0;
 	tflag=strchr(sim->flags,'t')?1:0;
-	scmdpop(sim->cmds,sim->tmax);
-	scmdexecute(sim->cmds,sim->time,sim->dt,-1,1);
 
 	simLog(sim,2,"\n");
 	if(er==1) simLog(sim,2,"Simulation complete\n");
@@ -2525,17 +2519,17 @@ void endsimulate(simptr sim,int er) {
 
 	simLog(sim,2,"total execution time: %g seconds\n",sim->elapsedtime);
 
-  // TODO: Useful when running benchmarks 
+  // TODO: Useful when running benchmarks
   // If SMOLDYN_NO_PROMPT is set by user then smoldyn quit at the
   // end of simultion without prompting user to press shift+Q.
-  // It is useful when running tests in batch mode locally. And it is essential 
+  // It is useful when running tests in batch mode locally. And it is essential
   // for testing  examples on remote servers such as Travis CI and github actions.
   const char* dontPrompt = getenv("SMOLDYN_NO_PROMPT");
-  if(dontPrompt != NULL && strlen(dontPrompt) > 0) 
+  if(dontPrompt != NULL && strlen(dontPrompt) > 0)
     sim->quitatend = 1;
 
   if(sim->graphss && sim->graphss->graphics>0 && !tflag && !sim->quitatend)
-    fprintf(stderr,"\nTo quit: Activate graphics window, then press shift-Q.\a\n"); 
+    fprintf(stderr,"\nTo quit: Activate graphics window, then press shift-Q.\a\n");
   return; }
 
 
@@ -2550,5 +2544,9 @@ int smolsimulate(simptr sim) {
 	er=simdocommands(sim);
 	if(!er)
 		while((er=simulatetimestep(sim))==0);
+	if(er!=10) {
+		scmdpop(sim->cmds,sim->tmax);
+		scmdexecute(sim->cmds,sim->time,sim->dt,-1,1);
+		scmdsetcondition(sim->cmds,0,0); }
 	sim->elapsedtime+=difftime(time(NULL),sim->clockstt);
 	return er; }

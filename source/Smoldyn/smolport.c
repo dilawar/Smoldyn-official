@@ -10,7 +10,6 @@
 #include <string.h>
 #include "string2.h"
 #include "Zn.h"
-#include <string>
 
 #include "smoldyn.h"
 #include "smoldynfuncs.h"
@@ -368,6 +367,7 @@ int loadport(simptr sim,ParseFilePtr *pfpptr,char* line2) {
 
 /* portsupdateparams */
 int portsupdateparams(simptr sim) {
+	(void)sim;
 	return 0; }
 
 
@@ -395,7 +395,7 @@ int portsupdatelists(simptr sim) {
 int portsupdate(simptr sim) {
 	int er;
 	portssptr portss;
-	
+
 	portss=sim->portss;
 	if(portss) {
 		if(portss->condition<=SClists) {
