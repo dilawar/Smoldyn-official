@@ -14,17 +14,15 @@ of the Gnu Lesser General Public License (LGPL). */
 
 // See https://learnopengl.com/Getting-started/Hello-Window
 #include <glad/glad.h>
-#include <GL/glut.h>
 #include <GLFW/glfw3.h>
 
 GLfloat *gl2Double2GLfloat(double *input, GLfloat *output, int n);
 
 void gluPerspective(GLdouble fovY, GLdouble aspect, GLdouble zNear, GLdouble zFar);
 
-void gl2Initialize(
-    char *wname, float xlo, float xhi, float ylo, float yhi, float zlo, float zhi);
+void gl2Initialize(char *wname, float xlo, float xhi, float ylo, float yhi, float zlo, float zhi);
 
-void  gl2glutInit(int *argc, char **argv);
+// void  gl2glutInit(int *argc, char **argv);
 
 int   gl2State(int state);
 

@@ -1341,9 +1341,10 @@ simptr Sim;
 
 
 /* smolPostRedisplay */
-void smolPostRedisplay(void) {	//??
+void smolPostRedisplay() {	//??
 #ifdef __gl_h_
-	glutPostRedisplay();
+	// glutPostRedisplay();
+    glfwSwapBuffers(Sim->window);
 #endif
 	return; }
 
