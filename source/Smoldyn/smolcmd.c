@@ -357,7 +357,7 @@ enum CMDcode cmdkeypress(simptr sim,cmdptr cmd,char *line2) {
 	SCMDCHECK(itct==1,"cannot read character");
 	tflag=strchr(sim->flags,'t')?1:0;
 	SCMDCHECK(sim->graphss && sim->graphss->graphics!=0 && !tflag,"keypress doesn't work without graphics");
-	gl2SetKeyPush((unsigned char) c);
+	gl2SetKeyPush(sim->window, (unsigned char) c);
 	return CMDok; }
 
 

@@ -9,12 +9,15 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include "Geometry.h"
-#include "math2.h"
-#include "opengl2.h"
+
+#include "../libSteve/Geometry.h"
+#include "../libSteve/SimCommand.h"
+
+#include "../libSteve/math2.h"
+#include "../libSteve/opengl2.h"
+
 #include "Rn.h"
 #include "string2.h"
-#include "../libSteve/SimCommand.h"
 
 #ifdef OPTION_NSV
   #include "nsvc.h"
@@ -22,7 +25,8 @@
 
 #include "smoldyn.h"
 #include "smoldynfuncs.h"
-#include "smoldynconfigure.h"
+
+// #include "smoldynconfigure.h"
 
 /******************************************************************************/
 /*********************************** Graphics *********************************/
@@ -65,7 +69,7 @@ void RenderSim(simptr sim);
 /* graphicsstring2lp */
 enum LightParam graphicsstring2lp(char *string) {
 	enum LightParam ans;
-	
+
 	if(strbegin(string,"ambient",0)) ans=LPambient;
 	else if(strbegin(string,"diffuse",0)) ans=LPdiffuse;
 	else if(strbegin(string,"specular",0)) ans=LPspecular;
@@ -231,7 +235,7 @@ graphicsssptr graphssalloc(void) {
 	graphss->backcolor[1]=1;
 	graphss->backcolor[2]=1;
 	graphss->backcolor[3]=1;
-	
+
 	graphss->textcolor[0]=0;		// black text
 	graphss->textcolor[1]=0;
 	graphss->textcolor[2]=0;
@@ -240,12 +244,12 @@ graphicsssptr graphssalloc(void) {
 	graphss->maxtextitems=0;
 	graphss->ntextitems=0;
 	graphss->textitems=NULL;
-	
+
 	graphicssetlight(NULL,graphss,-1,LPauto,NULL);
 	for(lt=0;lt<MAXLIGHTS;lt++) graphicssetlight(NULL,graphss,lt,LPauto,NULL);
 
 	return graphss;
-	
+
 failure:
 	graphssfree(graphss);
 	simLog(NULL,10,"Failed to allocate memory in graphssalloc");
@@ -353,7 +357,7 @@ void writegraphss(simptr sim,FILE *fptr) {
 
 	for(item=0;item<graphss->ntextitems;item++)
 		fprintf(fptr,"text_display %s\n",graphss->textitems[item]);
-	
+
 	if(graphss->roomstate!=LPauto) {
 		fprintf(fptr,"light global ambient %g %g %g %g\n",graphss->ambiroom[0],graphss->ambiroom[1],graphss->ambiroom[2],graphss->ambiroom[3]);
 		fprintf(fptr,"light global %s\n",graphicslp2string(graphss->roomstate,string)); }
@@ -437,7 +441,7 @@ int graphicsenablegraphics(simptr sim,const char *type) {
 /* graphicssetiter */
 int graphicssetiter(simptr sim,int iter) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(iter<1) return 3;
@@ -448,7 +452,7 @@ int graphicssetiter(simptr sim,int iter) {
 /* graphicssettiffiter */
 int graphicssettiffiter(simptr sim,int iter) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(iter<1) return 3;
@@ -459,7 +463,7 @@ int graphicssettiffiter(simptr sim,int iter) {
 /* graphicssetdelay */
 int graphicssetdelay(simptr sim,int delay) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(delay<0) return 3;
@@ -470,7 +474,7 @@ int graphicssetdelay(simptr sim,int delay) {
 /* graphicssetframethickness */
 int graphicssetframethickness(simptr sim,double thickness) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(thickness<0) return 3;
@@ -481,7 +485,7 @@ int graphicssetframethickness(simptr sim,double thickness) {
 /* graphicssetframecolor */
 int graphicssetframecolor(simptr sim,double *color) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(color[0]<0 || color[0]>1) return 3;
@@ -498,7 +502,7 @@ int graphicssetframecolor(simptr sim,double *color) {
 /* graphicssetgridthickness */
 int graphicssetgridthickness(simptr sim,double thickness) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(thickness<0) return 3;
@@ -509,7 +513,7 @@ int graphicssetgridthickness(simptr sim,double thickness) {
 /* graphicssetgridcolor */
 int graphicssetgridcolor(simptr sim,double *color) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(color[0]<0 || color[0]>1) return 3;
@@ -526,7 +530,7 @@ int graphicssetgridcolor(simptr sim,double *color) {
 /* graphicssetbackcolor */
 int graphicssetbackcolor(simptr sim,double *color) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(color[0]<0 || color[0]>1) return 3;
@@ -545,7 +549,7 @@ int graphicssetbackcolor(simptr sim,double *color) {
 /* graphicssettextcolor */
 int graphicssettextcolor(simptr sim,double *color) {
 	int er;
-	
+
 	er=graphicsenablegraphics(sim,NULL);
 	if(er) return er;
 	if(color[0]<0 || color[0]>1) return 3;
@@ -797,7 +801,7 @@ void RenderSurfaces(simptr sim) {
 	ypix=gl2GetNumber("PixHigh");
 	ymid=gl2GetNumber("ClipMidy");
 	zmid=gl2GetNumber("ClipMidz");
-	
+
 	if(sim->dim==1) {
 		for(s=0;s<srfss->nsrf;s++) {
 			srf=srfss->srflist[s];
@@ -824,7 +828,7 @@ void RenderSurfaces(simptr sim) {
 					glVertex3d((GLdouble)(point[0][0]-point[1][0]-front[0]*delta),(GLdouble)(ymid-(yhi-ylo)/20),(GLdouble)zmid);
 					glVertex3d((GLdouble)(point[0][0]-point[1][0]-front[0]*delta),(GLdouble)(ymid+(yhi-ylo)/20),(GLdouble)zmid); }
 				glEnd();
-				
+
 				delta*=-1;
 				glColor4fv(gl2Double2GLfloat(srf->bcolor,glfvect,4));
 				glBegin(GL_LINES);
@@ -846,7 +850,7 @@ void RenderSurfaces(simptr sim) {
 					glVertex3d((GLdouble)(point[0][0]-point[1][0]-front[0]*delta),(GLdouble)(ymid-(yhi-ylo)/20),(GLdouble)zmid);
 					glVertex3d((GLdouble)(point[0][0]-point[1][0]-front[0]*delta),(GLdouble)(ymid+(yhi-ylo)/20),(GLdouble)zmid); }
 				glEnd(); }}}
-	
+
 	else if(sim->dim==2) {
 		for(s=0;s<srfss->nsrf;s++) {
 			srf=srfss->srflist[s];
@@ -863,7 +867,7 @@ void RenderSurfaces(simptr sim) {
 					glPointSize((GLfloat)srf->edgepts);
 					deltax=deltay=0;
 					glBegin(GL_POINTS); }
-				
+
 				for(p=0;p<srf->npanel[0];p++) {		// 2-D rectangles front
 					point=srf->panels[0][p]->point;
 					front=srf->panels[0][p]->front;
@@ -904,7 +908,7 @@ void RenderSurfaces(simptr sim) {
 					if(fdrawmode&DMvert) gl2DrawArcD(point[0],point[1][0],theta,theta+PI,(int)point[1][1],'v',2);
 					if(fdrawmode&DMface) gl2DrawArcD(point[0],point[1][0],theta,theta+PI,(int)point[1][1],'f',2);
 					if(fdrawmode&DMedge) gl2DrawArcD(point[0],point[1][0]+front[0]*deltax,theta,theta+PI,(int)point[1][1],'e',2); }
-				
+
 				if(fdrawmode&DMedge || fdrawmode&DMface) {
 					deltax*=-1;
 					deltay*=-1;
@@ -946,7 +950,7 @@ void RenderSurfaces(simptr sim) {
 						front=srf->panels[4][p]->front;
 						theta=atan2(point[2][1],point[2][0])+PI/2.0;
 						if(bdrawmode&DMedge) gl2DrawArcD(point[0],point[1][0]+front[0]*deltax,theta,theta+PI,(int)point[1][1],'e',2); }}}}}
-	
+
 	else if(sim->dim==3) {
 		for(s=0;s<srfss->nsrf;s++) {
 			srf=srfss->srflist[s];
@@ -1002,7 +1006,7 @@ void RenderSurfaces(simptr sim) {
 						glVertex3d((GLdouble)(point[2][0]),(GLdouble)(point[2][1]),(GLdouble)(point[2][2]));
 						glVertex3d((GLdouble)(point[3][0]),(GLdouble)(point[3][1]),(GLdouble)(point[3][2])); }
 					glEnd(); }
-				
+
 				if(srf->npanel[PStri]) {
 					glBegin(GL_TRIANGLES);							// 3-D triangles
 					for(p=0;p<srf->npanel[PStri];p++) {
@@ -1012,7 +1016,7 @@ void RenderSurfaces(simptr sim) {
 						glVertex3d((GLdouble)(point[1][0]),(GLdouble)(point[1][1]),(GLdouble)(point[1][2]));
 						glVertex3d((GLdouble)(point[2][0]),(GLdouble)(point[2][1]),(GLdouble)(point[2][2])); }
 					glEnd(); }
-				
+
 				for(p=0;p<srf->npanel[PSsph];p++) {		// 3-D spheres
 					point=srf->panels[PSsph][p]->point;
 					front=srf->panels[PSsph][p]->front;
@@ -1021,7 +1025,7 @@ void RenderSurfaces(simptr sim) {
 					glTranslated((GLdouble)(point[0][0]),(GLdouble)(point[0][1]),(GLdouble)(point[0][2]));
 					gl2DrawSphere(point[1][0],(int)point[1][1],(int)point[1][2],front[0]>0?0:1,graphics>=3?1:0);
 					glPopMatrix(); }
-				
+
 				for(p=0;p<srf->npanel[PScyl];p++) {			// 3-D cylinders
 					point=srf->panels[PScyl][p]->point;
 					front=srf->panels[PScyl][p]->front;
@@ -1039,7 +1043,7 @@ void RenderSurfaces(simptr sim) {
 					glRotated((GLdouble)theta,(GLdouble)(axis[0]),(GLdouble)(axis[1]),(GLdouble)(axis[2]));
 					gl2DrawCylinder(point[2][0],point[2][0],height,(int)point[2][1],(int)point[2][2],front[0]>0?0:1,graphics>=3?1:0);
 					glPopMatrix(); }
-				
+
 				for(p=0;p<srf->npanel[PShemi];p++) {			// 3-D hemispheres
 					point=srf->panels[PShemi][p]->point;
 					front=srf->panels[PShemi][p]->front;
@@ -1052,7 +1056,7 @@ void RenderSurfaces(simptr sim) {
 					glRotated((GLdouble)theta,(GLdouble)(axis[0]),(GLdouble)(axis[1]),(GLdouble)(axis[2]));
 					gl2DrawHemisphere(point[1][0],(int)point[1][1],(int)point[1][2],front[0]>0?0:1,graphics>=3?1:0);
 					glPopMatrix(); }
-				
+
 				for(p=0;p<srf->npanel[PSdisk];p++) {			// 3-D disks
 					point=srf->panels[PSdisk][p]->point;
 					front=srf->panels[PSdisk][p]->front;
@@ -1097,7 +1101,7 @@ void RenderFilaments(simptr sim) {
 	double *point;
 	enum DrawMode drawmode;
 	GLfloat glfvect[4];
-	
+
 	filss=sim->filss;
 	if(!filss) return;
 	graphics=sim->graphss->graphics;
@@ -1358,7 +1362,7 @@ void TimerFunction(int state) {
 	int it;
 	simptr sim;
 	graphicsssptr graphss;
-	
+
 	sim=Sim;
 	graphss=sim->graphss;
 	//qflag=strchr(sim->flags,'q')?1:0;
@@ -1372,7 +1376,7 @@ void TimerFunction(int state) {
 	if(state==0 && gl2State(-1)==0) {										// normal run mode
 		it=graphss->currentit;
 		if(!(it%graphss->graphicit)) glutPostRedisplay();
-		if(graphss->tiffit>0 && it>0 && !((it-1)%graphss->tiffit)) gl2SetKeyPush('T');
+		if(graphss->tiffit>0 && it>0 && !((it-1)%graphss->tiffit)) gl2SetKeyPush(sim->window, 'T');
 		state=simulatetimestep(sim);
 		graphss->currentit++; }
 	else if(state>0 || (state==0 && gl2State(-1)==2)) {			// stop the simulation
@@ -1381,7 +1385,7 @@ void TimerFunction(int state) {
 		scmdexecute(sim->cmds,sim->time,sim->dt,-1,1);
 		scmdsetcondition(sim->cmds,0,0);
 		endsimulate(sim,state);
-		if(sim->quitatend) gl2SetKeyPush('Q');	//??
+		if(sim->quitatend) gl2SetKeyPush(sim->window, 'Q');	//??
 		state=-1; }
 	else if(oldstate==0 && gl2State(-1)==1) {					// enter pause state
 		sim->elapsedtime+=difftime(time(NULL),sim->clockstt);

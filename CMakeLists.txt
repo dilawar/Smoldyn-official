@@ -145,6 +145,7 @@ endif(OPTION_USE_ICONV)
 
 if(OPTION_USE_OPENGL)
     list(APPEND CONAN_LIBS glfw/3.3.3)
+    list(APPEND CONAN_LIBS glad/0.1.33)
 endif()
 if(OPTION_PYTHON)
     list(APPEND CONAN_LIBS pybind11/2.6.1)
@@ -334,7 +335,9 @@ if (OPTION_USE_OPENGL)
     # see cmake --help-policy CMP0072"
     set(HAVE_OPENGL TRUE)
     find_package(glfw3 REQUIRED)
-    list(APPEND DEP_LIBS glfw::glfw)
+    find_package(glad REQUIRED)
+    add_definitions(-DUSE_GLFW)
+    list(APPEND DEP_LIBS glfw::glfw glad::glad)
 endif()
 
 
